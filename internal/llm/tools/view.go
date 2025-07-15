@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/opencode-ai/opencode/internal/config"
-	"github.com/opencode-ai/opencode/internal/logging"
-	"github.com/opencode-ai/opencode/internal/lsp"
+	"github.com/kirmad/superopencode/internal/config"
+	"github.com/kirmad/superopencode/internal/logging"
+	"github.com/kirmad/superopencode/internal/lsp"
 )
 
 type ViewParams struct {

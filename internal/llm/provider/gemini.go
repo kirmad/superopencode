@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/opencode-ai/opencode/internal/config"
-	"github.com/opencode-ai/opencode/internal/llm/tools"
-	"github.com/opencode-ai/opencode/internal/logging"
-	"github.com/opencode-ai/opencode/internal/message"
+	"github.com/kirmad/superopencode/internal/config"
+	"github.com/kirmad/superopencode/internal/llm/tools"
+	"github.com/kirmad/superopencode/internal/logging"
+	"github.com/kirmad/superopencode/internal/message"
 	"google.golang.org/genai"
 )
 

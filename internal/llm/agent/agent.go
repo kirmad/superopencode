@@ -8,16 +8,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/opencode-ai/opencode/internal/config"
-	"github.com/opencode-ai/opencode/internal/llm/models"
-	"github.com/opencode-ai/opencode/internal/llm/prompt"
-	"github.com/opencode-ai/opencode/internal/llm/provider"
-	"github.com/opencode-ai/opencode/internal/llm/tools"
-	"github.com/opencode-ai/opencode/internal/logging"
-	"github.com/opencode-ai/opencode/internal/message"
-	"github.com/opencode-ai/opencode/internal/permission"
-	"github.com/opencode-ai/opencode/internal/pubsub"
-	"github.com/opencode-ai/opencode/internal/session"
+	"github.com/kirmad/superopencode/internal/config"
+	"github.com/kirmad/superopencode/internal/llm/models"
+	"github.com/kirmad/superopencode/internal/llm/prompt"
+	"github.com/kirmad/superopencode/internal/llm/provider"
+	"github.com/kirmad/superopencode/internal/llm/tools"
+	"github.com/kirmad/superopencode/internal/logging"
+	"github.com/kirmad/superopencode/internal/message"
+	"github.com/kirmad/superopencode/internal/permission"
+	"github.com/kirmad/superopencode/internal/pubsub"
+	"github.com/kirmad/superopencode/internal/session"
 )
 
 // Common errors

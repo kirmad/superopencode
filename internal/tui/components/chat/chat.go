@@ -6,12 +6,12 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/opencode-ai/opencode/internal/config"
-	"github.com/opencode-ai/opencode/internal/message"
-	"github.com/opencode-ai/opencode/internal/session"
-	"github.com/opencode-ai/opencode/internal/tui/styles"
-	"github.com/opencode-ai/opencode/internal/tui/theme"
-	"github.com/opencode-ai/opencode/internal/version"
+	"github.com/kirmad/superopencode/internal/config"
+	"github.com/kirmad/superopencode/internal/message"
+	"github.com/kirmad/superopencode/internal/session"
+	"github.com/kirmad/superopencode/internal/tui/styles"
+	"github.com/kirmad/superopencode/internal/tui/theme"
+	"github.com/kirmad/superopencode/internal/version"
 )
 
 type SendMsg struct {
@@ -120,7 +120,7 @@ func logo(width int) string {
 }
 
 func repo(width int) string {
-	repo := "https://github.com/opencode-ai/opencode"
+	repo := "https://github.com/kirmad/superopencode"
 	t := theme.CurrentTheme()
 
 	return styles.BaseStyle().

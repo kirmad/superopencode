@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/opencode-ai/opencode/internal/llm/models"
-	"github.com/opencode-ai/opencode/internal/llm/tools"
-	"github.com/opencode-ai/opencode/internal/message"
+	"github.com/kirmad/superopencode/internal/llm/models"
+	"github.com/kirmad/superopencode/internal/llm/tools"
+	"github.com/kirmad/superopencode/internal/message"
 )
 
 type EventType string

@@ -9,10 +9,10 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/opencode-ai/opencode/internal/logging"
-	"github.com/opencode-ai/opencode/internal/tui/layout"
-	"github.com/opencode-ai/opencode/internal/tui/styles"
-	"github.com/opencode-ai/opencode/internal/tui/theme"
+	"github.com/kirmad/superopencode/internal/logging"
+	"github.com/kirmad/superopencode/internal/tui/layout"
+	"github.com/kirmad/superopencode/internal/tui/styles"
+	"github.com/kirmad/superopencode/internal/tui/theme"
 )
 
 type DetailComponent interface {

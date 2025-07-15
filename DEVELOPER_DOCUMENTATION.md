@@ -1581,7 +1581,7 @@ This comprehensive integration enables OpenCode to leverage both language server
 **Building from Source:**
 ```bash
 # Clone the repository
-git clone https://github.com/opencode-ai/opencode.git
+git clone https://github.com/kirmad/superopencode.git
 cd opencode
 
 # Build the application
