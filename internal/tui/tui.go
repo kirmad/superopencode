@@ -961,5 +961,10 @@ If there are Cursor rules (in .cursor/rules/ or .cursorrules) or Copilot rules (
 		}
 	}
 
+	// Pass commands to chat page for slash command support
+	if chatPage, ok := model.pages[page.ChatPage].(page.CommandSetter); ok {
+		chatPage.SetCommands(model.commands)
+	}
+
 	return model
 }

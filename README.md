@@ -336,6 +336,7 @@ The output format is implemented as a strongly-typed `OutputFormat` in the codeb
 | `Ctrl+L` | View logs                                               |
 | `Ctrl+A` | Switch session                                          |
 | `Ctrl+K` | Command dialog                                          |
+| `/command` | Slash commands (e.g., `/design`, `/debug`, `/help`)  |
 | `Ctrl+O` | Toggle model selection dialog                           |
 | `Esc`    | Close current overlay/dialog or return to previous mode |
 
@@ -505,11 +506,32 @@ This creates a command with ID `user:git:commit`.
 
 ### Using Custom Commands
 
+There are two ways to use custom commands:
+
+#### Method 1: Command Dialog
 1. Press `Ctrl+K` to open the command dialog
 2. Select your custom command (prefixed with either `user:` or `project:`)
 3. Press Enter to execute the command
 
-The content of the command file will be sent as a message to the AI assistant.
+#### Method 2: Slash Commands (New!)
+1. Type `/` followed by the command name in the chat
+2. Add your specific prompt after the command name
+3. Press Enter to execute
+
+**Examples:**
+```
+/design Create REST API for user authentication
+/debug Memory leak in the cache module  
+/help
+```
+
+**Benefits of slash commands:**
+- Faster execution without dialog navigation
+- Combine command templates with specific context
+- Natural integration with chat flow
+- Support for command prefixes: `/user:command` or `/project:command`
+
+The content of the command file will be combined with your prompt and sent to the AI assistant.
 
 ### Built-in Commands
 

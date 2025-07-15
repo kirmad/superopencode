@@ -2,6 +2,8 @@ package page
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -19,6 +21,14 @@ import (
 
 var ChatPage PageID = "chat"
 
+// slashNamedArgPattern is used to find named arguments in command content
+var slashNamedArgPattern = regexp.MustCompile(`\$([A-Z][A-Z0-9_]*)`)
+
+// CommandSetter interface for models that can accept commands
+type CommandSetter interface {
+	SetCommands(commands []dialog.Command)
+}
+
 type chatPage struct {
 	app                  *app.App
 	editor               layout.Container
@@ -27,6 +37,8 @@ type chatPage struct {
 	session              session.Session
 	completionDialog     dialog.CompletionDialog
 	showCompletionDialog bool
+	commands             []dialog.Command // Commands for slash command processing
+	slashProcessor       *dialog.SlashCommandProcessor
 }
 
 type ChatKeyMap struct {
@@ -154,6 +166,12 @@ func (p *chatPage) clearSidebar() tea.Cmd {
 
 func (p *chatPage) sendMessage(text string, attachments []message.Attachment) tea.Cmd {
 	var cmds []tea.Cmd
+	
+	// Check for slash command before processing
+	if p.slashProcessor != nil && p.slashProcessor.IsSlashCommand(text) {
+		return p.handleSlashCommand(text, attachments)
+	}
+	
 	if p.session.ID == "" {
 		session, err := p.app.Sessions.Create(context.Background(), "New Session")
 		if err != nil {
@@ -173,6 +191,59 @@ func (p *chatPage) sendMessage(text string, attachments []message.Attachment) te
 		return util.ReportError(err)
 	}
 	return tea.Batch(cmds...)
+}
+
+// handleSlashCommand processes slash commands
+func (p *chatPage) handleSlashCommand(text string, attachments []message.Attachment) tea.Cmd {
+	// Check if agent is busy before executing slash commands
+	if p.app.CoderAgent.IsBusy() {
+		return util.ReportWarn("Agent is busy, please wait before executing a command...")
+	}
+
+	// Validate slash command syntax
+	if err := dialog.ValidateSlashCommand(text); err != nil {
+		return util.ReportError(err)
+	}
+
+	result := p.slashProcessor.ProcessSlashCommand(text)
+	if result.Error != nil {
+		// Extract command name for better error message
+		commandName := strings.TrimSpace(text)
+		if strings.HasPrefix(commandName, "/") {
+			parts := strings.SplitN(commandName[1:], " ", 2)
+			if len(parts) > 0 {
+				commandName = parts[0]
+			}
+		}
+		errorMsg := dialog.FormatSlashCommandError(result.Error, commandName)
+		return util.ReportError(fmt.Errorf(errorMsg))
+	}
+
+	// If the command needs arguments dialog, show it
+	if result.NeedsArgDialog {
+		// Extract argument names from the command content
+		matches := slashNamedArgPattern.FindAllStringSubmatch(result.Processed.Content, -1)
+		argNames := make([]string, 0)
+		argMap := make(map[string]bool)
+
+		for _, match := range matches {
+			argName := match[1] // Group 1 is the name without $
+			if !argMap[argName] {
+				argMap[argName] = true
+				argNames = append(argNames, argName)
+			}
+		}
+
+		// Show multi-arguments dialog
+		return util.CmdHandler(dialog.ShowMultiArgumentsDialogMsg{
+			CommandID: result.Processed.Command.ID,
+			Content:   result.Processed.Content,
+			ArgNames:  argNames,
+		})
+	}
+
+	// Execute the command directly with combined content
+	return p.sendMessage(result.Processed.Content, attachments)
 }
 
 func (p *chatPage) SetSize(width, height int) tea.Cmd {
@@ -229,9 +300,19 @@ func NewChatPage(app *app.App) tea.Model {
 		editor:           editorContainer,
 		messages:         messagesContainer,
 		completionDialog: completionDialog,
+		commands:         nil, // Will be set later via SetCommands
+		slashProcessor:   nil, // Will be created when commands are set
 		layout: layout.NewSplitPane(
 			layout.WithLeftPanel(messagesContainer),
 			layout.WithBottomPanel(editorContainer),
 		),
+	}
+}
+
+// SetCommands sets the commands for slash command processing
+func (p *chatPage) SetCommands(commands []dialog.Command) {
+	p.commands = commands
+	if len(commands) > 0 {
+		p.slashProcessor = dialog.NewSlashCommandProcessor(commands)
 	}
 }

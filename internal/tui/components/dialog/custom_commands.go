@@ -134,6 +134,7 @@ func loadCommandsFromDir(commandsDir string, prefix string) ([]Command, error) {
 			ID:          prefix + commandID,
 			Title:       prefix + commandID,
 			Description: fmt.Sprintf("Custom command from %s", relPath),
+			Content:     string(content), // Store content for slash commands
 			Handler: func(cmd Command) tea.Cmd {
 				commandContent := string(content)
 

@@ -16,6 +16,7 @@ type Command struct {
 	ID          string
 	Title       string
 	Description string
+	Content     string // Raw content for slash commands
 	Handler     func(cmd Command) tea.Cmd
 }
 
