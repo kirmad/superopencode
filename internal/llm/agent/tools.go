@@ -32,6 +32,8 @@ func CoderAgentTools(
 			tools.NewGrepTool(),
 			tools.NewLsTool(),
 			tools.NewSourcegraphTool(),
+			tools.NewTodoReadTool(),
+			tools.NewTodoWriteTool(),
 			tools.NewViewTool(lspClients),
 			tools.NewPatchTool(lspClients, permissions, history),
 			tools.NewWriteTool(lspClients, permissions, history),

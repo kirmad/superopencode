@@ -240,6 +240,10 @@ func toolName(name string) string {
 		return "Write"
 	case tools.PatchToolName:
 		return "Patch"
+	case tools.TodoReadToolName:
+		return "Read Todos"
+	case tools.TodoWriteToolName:
+		return "Update Todos"
 	}
 	return name
 }
@@ -268,6 +272,10 @@ func getToolAction(name string) string {
 		return "Preparing write..."
 	case tools.PatchToolName:
 		return "Preparing patch..."
+	case tools.TodoReadToolName:
+		return "Reading todo list..."
+	case tools.TodoWriteToolName:
+		return "Updating todos..."
 	}
 	return "Working..."
 }
@@ -423,6 +431,10 @@ func renderToolParams(paramWidth int, toolCall message.ToolCall) string {
 		json.Unmarshal([]byte(toolCall.Input), &params)
 		filePath := removeWorkingDirPrefix(params.FilePath)
 		return renderParams(paramWidth, filePath)
+	case tools.TodoReadToolName:
+		return ""
+	case tools.TodoWriteToolName:
+		return ""
 	default:
 		input := strings.ReplaceAll(toolCall.Input, "\n", " ")
 		params = renderParams(paramWidth, input)
@@ -436,6 +448,114 @@ func truncateHeight(content string, height int) string {
 		return strings.Join(lines[:height], "\n")
 	}
 	return content
+}
+
+// renderTodoReadResponse formats the TodoRead tool response with enhanced styling
+func renderTodoReadResponse(content string, width int, t theme.Theme) string {
+	baseStyle := styles.BaseStyle()
+	
+	if content == "No todos found for this session." {
+		return baseStyle.Width(width).Foreground(t.TextMuted()).Render("No active tasks in the todo list.")
+	}
+	
+	// Parse JSON todos
+	var todos []map[string]interface{}
+	if err := json.Unmarshal([]byte(content), &todos); err != nil {
+		// Debug: show what we received
+		debugMsg := fmt.Sprintf("Failed to parse todos JSON: %s\nRaw content: %s", err.Error(), content)
+		return baseStyle.Width(width).Foreground(t.Error()).Render(debugMsg)
+	}
+	
+	return renderTodoList(todos, width, t)
+}
+
+// renderTodoWriteResponse formats the TodoWrite tool response
+func renderTodoWriteResponse(content string, width int, t theme.Theme) string {
+	// Try to parse as JSON todo list first (new format)
+	var todos []map[string]interface{}
+
+	err := json.Unmarshal([]byte(content), &todos);
+	if err == nil {
+		// Successfully parsed JSON - render the todo list with checkboxes
+		return renderTodoList(todos, width, t)
+	}
+		
+	// If it's not JSON, check if it's a success message and show simple confirmation
+	if strings.Contains(content, "successfully") {
+		return styles.BaseStyle().Width(width).Foreground(t.Success()).Render("✓ Todos updated successfully")
+	}
+	
+	// Default: show as regular text for error messages
+	return styles.BaseStyle().Width(width).Foreground(t.TextMuted()).Render(content)
+}
+
+// renderTodoList formats a list of todos with proper styling, checkboxes, and colors
+func renderTodoList(todos []map[string]interface{}, width int, t theme.Theme) string {
+	if len(todos) == 0 {
+		return styles.BaseStyle().Width(width).Foreground(t.TextMuted()).Render("No active tasks in the todo list.")
+	}
+	
+	var lines []string
+	
+	for i, todo := range todos {
+		content := ""
+		status := ""
+		
+		if c, ok := todo["content"].(string); ok {
+			content = c
+		}
+		if s, ok := todo["status"].(string); ok {
+			status = s
+		}
+		
+		var line string
+		
+		// Format based on status with proper spacing and symbols
+		switch status {
+		case "completed":
+			// Completed: ☒ with green color and strikethrough
+			if i == 0 {
+				line = "  ⎿  ☒ " + content
+			} else {
+				line = "     ☒ " + content
+			}
+			// Apply green color with strikethrough using lipgloss
+			line = styles.BaseStyle().
+				Foreground(t.Success()).
+				Strikethrough(true).
+				Render(line)
+			
+		case "in_progress":
+			// In progress: ☐ with bold blue color
+			if i == 0 {
+				line = "  ⎿  ☐ " + content
+			} else {
+				line = "     ☐ " + content
+			}
+			// Apply bold blue color using lipgloss
+			line = styles.BaseStyle().
+				Foreground(t.Primary()).
+				Bold(true).
+				Render(line)
+			
+		default: // pending
+			// Pending: ☐ with normal color
+			if i == 0 {
+				line = "  ⎿  ☐ " + content
+			} else {
+				line = "     ☐ " + content
+			}
+			// Apply normal text color
+			line = styles.BaseStyle().
+				Foreground(t.Text()).
+				Render(line)
+		}
+		
+		lines = append(lines, line)
+	}
+	
+	result := strings.Join(lines, "\n")
+	return result
 }
 
 func renderToolResponse(toolCall message.ToolCall, response message.ToolResult, width int) string {
@@ -521,6 +641,16 @@ func renderToolResponse(toolCall message.ToolCall, response message.ToolResult, 
 		resultContent = fmt.Sprintf("```%s\n%s\n```", ext, truncateHeight(params.Content, maxResultHeight))
 		return styles.ForceReplaceBackgroundWithLipgloss(
 			toMarkdown(resultContent, true, width),
+			t.Background(),
+		)
+	case tools.TodoReadToolName:
+		return styles.ForceReplaceBackgroundWithLipgloss(
+			renderTodoReadResponse(response.Content, width, t),
+			t.Background(),
+		)
+	case tools.TodoWriteToolName:
+		return styles.ForceReplaceBackgroundWithLipgloss(
+		    renderTodoWriteResponse(response.Content, width, t),
 			t.Background(),
 		)
 	default:

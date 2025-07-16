@@ -57,7 +57,7 @@ func newAnthropicClient(opts providerClientOptions) AnthropicClient {
 	}
 }
 
-func (a *anthropicClient) convertMessages(messages []message.Message) (anthropicMessages []anthropic.MessageParam) {
+func (a *anthropicClient) convertMessages(ctx context.Context, messages []message.Message) (anthropicMessages []anthropic.MessageParam) {
 	for i, msg := range messages {
 		cache := false
 		if i > len(messages)-3 {
@@ -115,6 +115,22 @@ func (a *anthropicClient) convertMessages(messages []message.Message) (anthropic
 			anthropicMessages = append(anthropicMessages, anthropic.NewUserMessage(results...))
 		}
 	}
+	
+	// Add TODO reminder as last user message if needed
+	if sessionID, ok := ctx.Value(toolsPkg.SessionIDContextKey).(string); ok {
+		reminder := toolsPkg.GetTodoReminderForSession(sessionID)
+		if reminder != "" {
+			reminderContent := anthropic.NewTextBlock(reminder)
+			// Add ephemeral cache control
+			if !a.options.disableCache {
+				reminderContent.OfText.CacheControl = anthropic.CacheControlEphemeralParam{
+					Type: "ephemeral",
+				}
+			}
+			anthropicMessages = append(anthropicMessages, anthropic.NewUserMessage(reminderContent))
+		}
+	}
+	
 	return
 }
 
@@ -196,7 +212,7 @@ func (a *anthropicClient) preparedMessages(messages []anthropic.MessageParam, to
 }
 
 func (a *anthropicClient) send(ctx context.Context, messages []message.Message, tools []toolsPkg.BaseTool) (resposne *ProviderResponse, err error) {
-	preparedMessages := a.preparedMessages(a.convertMessages(messages), a.convertTools(tools))
+	preparedMessages := a.preparedMessages(a.convertMessages(ctx, messages), a.convertTools(tools))
 	cfg := config.Get()
 	if cfg.Debug {
 		jsonData, _ := json.Marshal(preparedMessages)
@@ -245,7 +261,7 @@ func (a *anthropicClient) send(ctx context.Context, messages []message.Message, 
 }
 
 func (a *anthropicClient) stream(ctx context.Context, messages []message.Message, tools []toolsPkg.BaseTool) <-chan ProviderEvent {
-	preparedMessages := a.preparedMessages(a.convertMessages(messages), a.convertTools(tools))
+	preparedMessages := a.preparedMessages(a.convertMessages(ctx, messages), a.convertTools(tools))
 	cfg := config.Get()
 
 	var sessionId string

@@ -186,7 +186,7 @@ func newCopilotClient(opts providerClientOptions) CopilotClient {
 	}
 }
 
-func (c *copilotClient) convertMessages(messages []message.Message) (copilotMessages []openai.ChatCompletionMessageParamUnion) {
+func (c *copilotClient) convertMessages(ctx context.Context, messages []message.Message) (copilotMessages []openai.ChatCompletionMessageParamUnion) {
 	// Add system message first
 	copilotMessages = append(copilotMessages, openai.SystemMessage(c.providerOptions.systemMessage))
 
@@ -243,6 +243,18 @@ func (c *copilotClient) convertMessages(messages []message.Message) (copilotMess
 		}
 	}
 
+	// Add TODO reminder as last user message if needed
+	if sessionID, ok := ctx.Value(toolsPkg.SessionIDContextKey).(string); ok {
+		reminder := toolsPkg.GetTodoReminderForSession(sessionID)
+		if reminder != "" {
+			textBlock := openai.ChatCompletionContentPartTextParam{Text: reminder}
+			content := []openai.ChatCompletionContentPartUnionParam{
+				{OfText: &textBlock},
+			}
+			copilotMessages = append(copilotMessages, openai.UserMessage(content))
+		}
+	}
+
 	return
 }
 
@@ -251,17 +263,30 @@ func (c *copilotClient) convertTools(tools []toolsPkg.BaseTool) []openai.ChatCom
 
 	for i, tool := range tools {
 		info := tool.Info()
+		
+		
+		// Handle different parameter formats
+		var parameters openai.FunctionParameters
+		if _, hasType := info.Parameters["type"]; hasType {
+			// This is a complete JSON schema (like TodoRead/TodoWrite)
+			parameters = openai.FunctionParameters(info.Parameters)
+		} else {
+			// This is just properties (like Bash, Edit, etc.)
+			parameters = openai.FunctionParameters{
+				"type":       "object",
+				"properties": info.Parameters,
+				"required":   info.Required,
+			}
+		}
+		
 		copilotTools[i] = openai.ChatCompletionToolParam{
 			Function: openai.FunctionDefinitionParam{
 				Name:        info.Name,
 				Description: openai.String(info.Description),
-				Parameters: openai.FunctionParameters{
-					"type":       "object",
-					"properties": info.Parameters,
-					"required":   info.Required,
-				},
+				Parameters:  parameters,
 			},
 		}
+		
 	}
 
 	return copilotTools
@@ -307,7 +332,7 @@ func (c *copilotClient) preparedParams(messages []openai.ChatCompletionMessagePa
 }
 
 func (c *copilotClient) send(ctx context.Context, messages []message.Message, tools []toolsPkg.BaseTool) (response *ProviderResponse, err error) {
-	params := c.preparedParams(c.convertMessages(messages), c.convertTools(tools))
+	params := c.preparedParams(c.convertMessages(ctx, messages), c.convertTools(tools))
 	cfg := config.Get()
 	var sessionId string
 	requestSeqId := (len(messages) + 1) / 2
@@ -374,7 +399,7 @@ func (c *copilotClient) send(ctx context.Context, messages []message.Message, to
 }
 
 func (c *copilotClient) stream(ctx context.Context, messages []message.Message, tools []toolsPkg.BaseTool) <-chan ProviderEvent {
-	params := c.preparedParams(c.convertMessages(messages), c.convertTools(tools))
+	params := c.preparedParams(c.convertMessages(ctx, messages), c.convertTools(tools))
 	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
 		IncludeUsage: openai.Bool(true),
 	}
@@ -586,6 +611,7 @@ func (c *copilotClient) shouldRetry(attempts int, err error) (bool, int64, error
 		return false, 0, fmt.Errorf("authentication failed: %w", err)
 	}
 	logging.Debug("Copilot API Error", "status", apierr.StatusCode, "headers", apierr.Response.Header, "body", apierr.RawJSON())
+	
 
 	if apierr.StatusCode != 429 && apierr.StatusCode != 500 {
 		return false, 0, err

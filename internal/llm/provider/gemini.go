@@ -50,7 +50,7 @@ func newGeminiClient(opts providerClientOptions) GeminiClient {
 	}
 }
 
-func (g *geminiClient) convertMessages(messages []message.Message) []*genai.Content {
+func (g *geminiClient) convertMessages(ctx context.Context, messages []message.Message) []*genai.Content {
 	var history []*genai.Content
 	for _, msg := range messages {
 		switch msg.Role {
@@ -129,6 +129,19 @@ func (g *geminiClient) convertMessages(messages []message.Message) []*genai.Cont
 		}
 	}
 
+	// Add TODO reminder as last user message if needed
+	if sessionID, ok := ctx.Value(tools.SessionIDContextKey).(string); ok {
+		reminder := tools.GetTodoReminderForSession(sessionID)
+		if reminder != "" {
+			history = append(history, &genai.Content{
+				Parts: []*genai.Part{
+					{Text: reminder},
+				},
+				Role: "user",
+			})
+		}
+	}
+
 	return history
 }
 
@@ -167,7 +180,7 @@ func (g *geminiClient) finishReason(reason genai.FinishReason) message.FinishRea
 
 func (g *geminiClient) send(ctx context.Context, messages []message.Message, tools []tools.BaseTool) (*ProviderResponse, error) {
 	// Convert messages
-	geminiMessages := g.convertMessages(messages)
+	geminiMessages := g.convertMessages(ctx, messages)
 
 	cfg := config.Get()
 	if cfg.Debug {
@@ -255,7 +268,7 @@ func (g *geminiClient) send(ctx context.Context, messages []message.Message, too
 
 func (g *geminiClient) stream(ctx context.Context, messages []message.Message, tools []tools.BaseTool) <-chan ProviderEvent {
 	// Convert messages
-	geminiMessages := g.convertMessages(messages)
+	geminiMessages := g.convertMessages(ctx, messages)
 
 	cfg := config.Get()
 	if cfg.Debug {

@@ -65,7 +65,7 @@ func newOpenAIClient(opts providerClientOptions) OpenAIClient {
 	}
 }
 
-func (o *openaiClient) convertMessages(messages []message.Message) (openaiMessages []openai.ChatCompletionMessageParamUnion) {
+func (o *openaiClient) convertMessages(ctx context.Context, messages []message.Message) (openaiMessages []openai.ChatCompletionMessageParamUnion) {
 	// Add system message first
 	openaiMessages = append(openaiMessages, openai.SystemMessage(o.providerOptions.systemMessage))
 
@@ -119,6 +119,18 @@ func (o *openaiClient) convertMessages(messages []message.Message) (openaiMessag
 					openai.ToolMessage(result.Content, result.ToolCallID),
 				)
 			}
+		}
+	}
+
+	// Add TODO reminder as last user message if needed
+	if sessionID, ok := ctx.Value(tools.SessionIDContextKey).(string); ok {
+		reminder := tools.GetTodoReminderForSession(sessionID)
+		if reminder != "" {
+			textBlock := openai.ChatCompletionContentPartTextParam{Text: reminder}
+			content := []openai.ChatCompletionContentPartUnionParam{
+				{OfText: &textBlock},
+			}
+			openaiMessages = append(openaiMessages, openai.UserMessage(content))
 		}
 	}
 
@@ -186,7 +198,7 @@ func (o *openaiClient) preparedParams(messages []openai.ChatCompletionMessagePar
 }
 
 func (o *openaiClient) send(ctx context.Context, messages []message.Message, tools []tools.BaseTool) (response *ProviderResponse, err error) {
-	params := o.preparedParams(o.convertMessages(messages), o.convertTools(tools))
+	params := o.preparedParams(o.convertMessages(ctx, messages), o.convertTools(tools))
 	cfg := config.Get()
 	if cfg.Debug {
 		jsonData, _ := json.Marshal(params)
@@ -239,7 +251,7 @@ func (o *openaiClient) send(ctx context.Context, messages []message.Message, too
 }
 
 func (o *openaiClient) stream(ctx context.Context, messages []message.Message, tools []tools.BaseTool) <-chan ProviderEvent {
-	params := o.preparedParams(o.convertMessages(messages), o.convertTools(tools))
+	params := o.preparedParams(o.convertMessages(ctx, messages), o.convertTools(tools))
 	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
 		IncludeUsage: openai.Bool(true),
 	}
