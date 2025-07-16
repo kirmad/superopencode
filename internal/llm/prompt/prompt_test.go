@@ -15,7 +15,7 @@ func TestGetContextFromPaths(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	_, err := config.Load(tmpDir, false)
+	_, err := config.Load(tmpDir, false, false)
 	if err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}

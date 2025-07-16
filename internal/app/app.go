@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
 	"sync"
 	"time"
 
@@ -37,6 +38,9 @@ type App struct {
 	watcherCancelFuncs []context.CancelFunc
 	cancelFuncsMutex   sync.Mutex
 	watcherWG          sync.WaitGroup
+	
+	// DangerousMode indicates if all permissions should be auto-approved
+	DangerousMode bool
 }
 
 func New(ctx context.Context, conn *sql.DB) (*App, error) {
@@ -80,6 +84,35 @@ func New(ctx context.Context, conn *sql.DB) (*App, error) {
 	return app, nil
 }
 
+// SetDangerousMode enables dangerous mode where all permissions are auto-approved
+func (a *App) SetDangerousMode(enabled bool) {
+	a.DangerousMode = enabled
+	if enabled {
+		logging.Warn("Dangerous mode enabled - all new sessions will auto-approve permissions")
+	}
+}
+
+// AutoApproveSessionIfDangerous auto-approves permissions for a session if dangerous mode is enabled
+func (a *App) AutoApproveSessionIfDangerous(sessionID string) {
+	if a.DangerousMode {
+		a.Permissions.AutoApproveSession(sessionID)
+		logging.Warn("SECURITY: Auto-approved permissions for session due to dangerous mode", 
+			"session_id", sessionID, 
+			"user", os.Getenv("USER"),
+			"working_directory", getCurrentWorkingDir(),
+			"timestamp", time.Now().UTC().Format(time.RFC3339))
+	}
+}
+
+// getCurrentWorkingDir safely gets the current working directory
+func getCurrentWorkingDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "unknown"
+	}
+	return dir
+}
+
 // initTheme sets the application theme based on the configuration
 func (app *App) initTheme() {
 	cfg := config.Get()
@@ -97,7 +130,7 @@ func (app *App) initTheme() {
 }
 
 // RunNonInteractive handles the execution flow when a prompt is provided via CLI flag.
-func (a *App) RunNonInteractive(ctx context.Context, prompt string, outputFormat string, quiet bool) error {
+func (a *App) RunNonInteractive(ctx context.Context, prompt string, outputFormat string, quiet bool, dangerousMode bool) error {
 	logging.Info("Running in non-interactive mode")
 
 	// Start spinner if not in quiet mode
@@ -127,6 +160,11 @@ func (a *App) RunNonInteractive(ctx context.Context, prompt string, outputFormat
 
 	// Automatically approve all permission requests for this non-interactive session
 	a.Permissions.AutoApproveSession(sess.ID)
+	
+	// If dangerous mode is enabled, this provides the same auto-approval but with additional logging
+	if dangerousMode {
+		logging.Warn("Dangerous mode enabled - all permissions auto-approved for session", "session_id", sess.ID)
+	}
 
 	done, err := a.CoderAgent.Run(ctx, sess.ID, prompt)
 	if err != nil {

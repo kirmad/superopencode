@@ -8,8 +8,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
+	"github.com/kirmad/superopencode/internal/detailed_logging"
 	"github.com/kirmad/superopencode/internal/llm/models"
 	"github.com/kirmad/superopencode/internal/logging"
 	"github.com/spf13/viper"
@@ -45,9 +47,11 @@ const (
 
 // Agent defines configuration for different LLM models and their token limits.
 type Agent struct {
-	Model           models.ModelID `json:"model"`
-	MaxTokens       int64          `json:"maxTokens"`
-	ReasoningEffort string         `json:"reasoningEffort"` // For openai models low,medium,heigh
+	Model                models.ModelID `json:"model"`
+	MaxTokens            int64          `json:"maxTokens"`
+	ReasoningEffort      string         `json:"reasoningEffort"` // For openai models low,medium,heigh
+	TodoDrivenExecution  bool           `json:"todoDrivenExecution,omitempty"`
+	MaxTodoContinuations int            `json:"maxTodoContinuations,omitempty"`
 }
 
 // Provider defines configuration for an LLM provider.
@@ -90,6 +94,7 @@ type Config struct {
 	Agents       map[AgentName]Agent               `json:"agents,omitempty"`
 	Debug        bool                              `json:"debug,omitempty"`
 	DebugLSP     bool                              `json:"debugLSP,omitempty"`
+	DetailedLog  bool                              `json:"detailedLog,omitempty"`
 	ContextPaths []string                          `json:"contextPaths,omitempty"`
 	TUI          TUIConfig                         `json:"tui"`
 	Shell        ShellConfig                       `json:"shell,omitempty"`
@@ -124,21 +129,23 @@ var cfg *Config
 
 // Load initializes the configuration from environment variables and config files.
 // If debug is true, debug mode is enabled and log level is set to debug.
+// If detailedLog is true, detailed logging for copilot requests/responses is enabled.
 // It returns an error if configuration loading fails.
-func Load(workingDir string, debug bool) (*Config, error) {
+func Load(workingDir string, debug bool, detailedLog bool) (*Config, error) {
 	if cfg != nil {
 		return cfg, nil
 	}
 
 	cfg = &Config{
-		WorkingDir: workingDir,
-		MCPServers: make(map[string]MCPServer),
-		Providers:  make(map[models.ModelProvider]Provider),
-		LSP:        make(map[string]LSPConfig),
+		WorkingDir:  workingDir,
+		MCPServers:  make(map[string]MCPServer),
+		Providers:   make(map[models.ModelProvider]Provider),
+		LSP:         make(map[string]LSPConfig),
+		DetailedLog: detailedLog,
 	}
 
 	configureViper()
-	setDefaults(debug)
+	setDefaults(debug, detailedLog)
 
 	// Read global config
 	if err := readConfig(viper.ReadInConfig()); err != nil {
@@ -212,6 +219,10 @@ func Load(workingDir string, debug bool) (*Config, error) {
 		Model:     cfg.Agents[AgentTitle].Model,
 		MaxTokens: 80,
 	}
+
+	// Initialize detailed logging if enabled
+	detailed_logging.InitializeDetailedLogging(cfg.DetailedLog, cfg.Data.Directory)
+
 	return cfg, nil
 }
 
@@ -227,7 +238,7 @@ func configureViper() {
 }
 
 // setDefaults configures default values for configuration options.
-func setDefaults(debug bool) {
+func setDefaults(debug bool, detailedLog bool) {
 	viper.SetDefault("data.directory", defaultDataDirectory)
 	viper.SetDefault("contextPaths", defaultContextPaths)
 	viper.SetDefault("tui.theme", "opencode")
@@ -247,6 +258,12 @@ func setDefaults(debug bool) {
 	} else {
 		viper.SetDefault("debug", false)
 		viper.SetDefault("log.level", defaultLogLevel)
+	}
+
+	if detailedLog {
+		viper.SetDefault("detailedLog", true)
+	} else {
+		viper.SetDefault("detailedLog", false)
 	}
 }
 
@@ -977,4 +994,45 @@ func LoadGitHubToken() (string, error) {
 	}
 
 	return "", fmt.Errorf("GitHub token not found in standard locations")
+}
+
+// IsTodoDrivenExecutionEnabled checks if todo-driven execution is enabled for an agent
+func (c *Config) IsTodoDrivenExecutionEnabled(agentName AgentName) bool {
+	// Check environment variable first (highest priority)
+	if os.Getenv("SUPEROPENCODE_AUTO_COMPLETE_TODOS") == "true" {
+		return true
+	}
+	
+	// Check agent configuration
+	if agent, ok := c.Agents[agentName]; ok {
+		return agent.TodoDrivenExecution
+	}
+	
+	return false
+}
+
+// GetMaxTodoContinuations returns the maximum number of todo continuations for an agent
+func (c *Config) GetMaxTodoContinuations(agentName AgentName) int {
+	// Check environment variable first
+	if envValue := os.Getenv("SUPEROPENCODE_MAX_TODO_CONTINUATIONS"); envValue != "" {
+		if value := parseIntWithDefault(envValue, 10); value > 0 {
+			return value
+		}
+	}
+	
+	// Check agent configuration
+	if agent, ok := c.Agents[agentName]; ok && agent.MaxTodoContinuations > 0 {
+		return agent.MaxTodoContinuations
+	}
+	
+	// Default value
+	return 10
+}
+
+// parseIntWithDefault parses string to int with default fallback
+func parseIntWithDefault(s string, defaultValue int) int {
+	if i, err := strconv.Atoi(s); err == nil {
+		return i
+	}
+	return defaultValue
 }
