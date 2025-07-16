@@ -184,3 +184,148 @@ func TestCommandResolutionOrder(t *testing.T) {
 		t.Errorf("Expected to find 'test' command, got '%s'", result.Processed.Command.ID)
 	}
 }
+
+// Tests for slash command suggestions functionality
+func TestSlashCommandProcessor_GetSuggestions(t *testing.T) {
+	commands := []Command{
+		{ID: "build", Title: "Build Project", Description: "Build the current project"},
+		{ID: "test", Title: "Run Tests", Description: "Execute test suite"},
+		{ID: "deploy", Title: "Deploy App", Description: "Deploy to production"},
+		{ID: "user:backup", Title: "Backup Files", Description: "Create backup"},
+		{ID: "project:setup", Title: "Setup Project", Description: "Initialize project"},
+	}
+	
+	processor := NewSlashCommandProcessor(commands)
+	
+	tests := []struct {
+		input    string
+		expected []string
+		maxCount int
+	}{
+		// Empty input should return all commands
+		{"", []string{"build", "test", "deploy", "backup", "setup"}, 10},
+		// Partial matches
+		{"/", []string{"build", "test", "deploy", "backup", "setup"}, 10},
+		{"/b", []string{"build", "backup"}, 10},
+		{"/te", []string{"test"}, 10},
+		{"/dep", []string{"deploy"}, 10},
+		// Case insensitive
+		{"/B", []string{"build", "backup"}, 10},
+		{"/TEST", []string{"test"}, 10},
+		// No matches
+		{"/xyz", []string{}, 10},
+		// Limit results
+		{"/", []string{"build", "test"}, 2},
+		// Non-slash prefix
+		{"b", []string{}, 10},
+	}
+	
+	for _, test := range tests {
+		suggestions := processor.GetSuggestions(test.input, test.maxCount)
+		
+		if len(suggestions) != len(test.expected) {
+			t.Errorf("GetSuggestions(%q, %d) returned %d suggestions, expected %d", 
+				test.input, test.maxCount, len(suggestions), len(test.expected))
+			continue
+		}
+		
+		for i, expected := range test.expected {
+			if i >= len(suggestions) || suggestions[i].Command != expected {
+				t.Errorf("GetSuggestions(%q, %d) suggestion[%d] = %v, expected command '%s'", 
+					test.input, test.maxCount, i, suggestions[i], expected)
+			}
+		}
+	}
+}
+
+func TestSlashCommandProcessor_GetSuggestionsWithDetails(t *testing.T) {
+	commands := []Command{
+		{ID: "build", Title: "Build Project", Description: "Build the current project"},
+		{ID: "test", Title: "Run Tests", Description: "Execute test suite"},
+	}
+	
+	processor := NewSlashCommandProcessor(commands)
+	suggestions := processor.GetSuggestions("/b", 10)
+	
+	if len(suggestions) != 1 {
+		t.Fatalf("Expected 1 suggestion, got %d", len(suggestions))
+	}
+	
+	suggestion := suggestions[0]
+	if suggestion.Command != "build" {
+		t.Errorf("Expected command 'build', got '%s'", suggestion.Command)
+	}
+	if suggestion.Title != "Build Project" {
+		t.Errorf("Expected title 'Build Project', got '%s'", suggestion.Title)
+	}
+	if suggestion.Description != "Build the current project" {
+		t.Errorf("Expected description 'Build the current project', got '%s'", suggestion.Description)
+	}
+}
+
+func TestSlashCommandProcessor_AutofillCommand(t *testing.T) {
+	commands := []Command{
+		{ID: "build", Title: "Build Project", Description: "Build the current project"},
+		{ID: "backup", Title: "Backup Files", Description: "Create backup"},
+		{ID: "test", Title: "Run Tests", Description: "Execute test suite"},
+	}
+	
+	processor := NewSlashCommandProcessor(commands)
+	
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		// Unique matches
+		{"/bu", "/build"},  // Only build starts with "bu"
+		{"/t", "/test"},    // Only test starts with "t"
+		// Non-unique matches
+		{"/b", "/b"},       // Both build and backup start with "b", no autofill
+		// No matches
+		{"/xyz", "/xyz"},   // No command starts with "xyz"
+		// Already complete
+		{"/build", "/build"}, // Already complete, no change
+		// Non-slash input
+		{"bu", "bu"},       // Not a slash command
+	}
+	
+	for _, test := range tests {
+		result := processor.AutofillCommand(test.input)
+		if result != test.expected {
+			t.Errorf("AutofillCommand(%q) = %q, expected %q", test.input, result, test.expected)
+		}
+	}
+}
+
+func TestSlashCommandProcessor_GetCommonPrefix(t *testing.T) {
+	commands := []Command{
+		{ID: "build", Title: "Build Project", Description: "Build the current project"},
+		{ID: "backup", Title: "Backup Files", Description: "Create backup"},
+		{ID: "test", Title: "Run Tests", Description: "Execute test suite"},
+	}
+	
+	processor := NewSlashCommandProcessor(commands)
+	
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		// Common prefix cases
+		{"/b", "/b"},       // "build" and "backup" have common prefix "b", but no improvement
+		{"/bu", "/build"},  // Only "build" starts with "bu", so return full command
+		{"/bui", "/build"}, // Only "build" starts with "bui", so return full command
+		// No matches
+		{"/xyz", "/xyz"},   // No command starts with "xyz"
+		// Single character after slash
+		{"/t", "/test"},    // Only "test" starts with "t"
+		// Non-slash input
+		{"b", "b"},         // Not a slash command
+	}
+	
+	for _, test := range tests {
+		result := processor.GetCommonPrefix(test.input)
+		if result != test.expected {
+			t.Errorf("GetCommonPrefix(%q) = %q, expected %q", test.input, result, test.expected)
+		}
+	}
+}

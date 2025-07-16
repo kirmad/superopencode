@@ -28,6 +28,13 @@ type SlashCommandResult struct {
 	NeedsArgDialog bool
 }
 
+// Suggestion represents a slash command suggestion for autocomplete
+type Suggestion struct {
+	Command     string // The command name (without /)
+	Title       string // Display title
+	Description string // Command description
+}
+
 // namedArgPattern is used to find named arguments in command content
 var slashNamedArgPattern = regexp.MustCompile(`\$([A-Z][A-Z0-9_]*)`)
 
@@ -181,6 +188,158 @@ func (scp *SlashCommandProcessor) GetAvailableCommands() []string {
 	}
 
 	return commands
+}
+
+// GetSuggestions returns slash command suggestions based on partial input
+func (scp *SlashCommandProcessor) GetSuggestions(input string, maxCount int) []Suggestion {
+	var suggestions []Suggestion
+	
+	trimmed := strings.TrimSpace(input)
+	
+	// Empty input or just "/" - return all commands
+	if trimmed == "" || trimmed == "/" {
+		return scp.getAllSuggestions(maxCount)
+	}
+	
+	// If input doesn't start with /, return empty suggestions for now
+	if !strings.HasPrefix(trimmed, "/") {
+		return suggestions
+	}
+	
+	// Extract the partial command name (remove leading / and whitespace)
+	if len(trimmed) <= 1 {
+		// Just "/" - return all commands
+		return scp.getAllSuggestions(maxCount)
+	}
+	
+	partial := strings.ToLower(trimmed[1:]) // Remove "/" and convert to lowercase for comparison
+	seen := make(map[string]bool)
+	
+	for _, cmd := range scp.commands {
+		// Extract base command name
+		name := cmd.ID
+		if strings.HasPrefix(name, UserCommandPrefix) {
+			name = strings.TrimPrefix(name, UserCommandPrefix)
+		} else if strings.HasPrefix(name, ProjectCommandPrefix) {
+			name = strings.TrimPrefix(name, ProjectCommandPrefix)
+		}
+		
+		// Skip if we've already added this command name
+		if seen[name] {
+			continue
+		}
+		
+		// Check if the command name starts with the partial input (case insensitive)
+		if strings.HasPrefix(strings.ToLower(name), partial) {
+			suggestion := Suggestion{
+				Command:     name,
+				Title:       cmd.Title,
+				Description: cmd.Description,
+			}
+			suggestions = append(suggestions, suggestion)
+			seen[name] = true
+			
+			// Limit results
+			if len(suggestions) >= maxCount {
+				break
+			}
+		}
+	}
+	
+	return suggestions
+}
+
+// getAllSuggestions returns all available commands as suggestions
+func (scp *SlashCommandProcessor) getAllSuggestions(maxCount int) []Suggestion {
+	var suggestions []Suggestion
+	seen := make(map[string]bool)
+	
+	for _, cmd := range scp.commands {
+		// Extract base command name
+		name := cmd.ID
+		if strings.HasPrefix(name, UserCommandPrefix) {
+			name = strings.TrimPrefix(name, UserCommandPrefix)
+		} else if strings.HasPrefix(name, ProjectCommandPrefix) {
+			name = strings.TrimPrefix(name, ProjectCommandPrefix)
+		}
+		
+		// Skip if we've already added this command name
+		if seen[name] {
+			continue
+		}
+		
+		suggestion := Suggestion{
+			Command:     name,
+			Title:       cmd.Title,
+			Description: cmd.Description,
+		}
+		suggestions = append(suggestions, suggestion)
+		seen[name] = true
+		
+		// Limit results
+		if len(suggestions) >= maxCount {
+			break
+		}
+	}
+	
+	return suggestions
+}
+
+// AutofillCommand returns the completed command text if there's a unique match
+func (scp *SlashCommandProcessor) AutofillCommand(input string) string {
+	// Get more suggestions to check if there are multiple matches
+	suggestions := scp.GetSuggestions(input, 10)
+	if len(suggestions) == 1 {
+		return "/" + suggestions[0].Command
+	}
+	return input // Return original if no matches or multiple matches
+}
+
+// GetCommonPrefix returns the longest common prefix among suggestions
+func (scp *SlashCommandProcessor) GetCommonPrefix(input string) string {
+	suggestions := scp.GetSuggestions(input, 100) // Get all suggestions
+	if len(suggestions) == 0 {
+		return input
+	}
+	
+	if len(suggestions) == 1 {
+		return "/" + suggestions[0].Command
+	}
+	
+	// Find common prefix among all suggestions
+	prefix := suggestions[0].Command
+	for i := 1; i < len(suggestions); i++ {
+		prefix = commonPrefix(prefix, suggestions[i].Command)
+		if prefix == "" {
+			break
+		}
+	}
+	
+	// Only return if the prefix is longer than current input
+	currentInput := strings.TrimSpace(input)
+	if len(currentInput) > 1 { // Remove "/"
+		currentCommand := currentInput[1:]
+		if len(prefix) > len(currentCommand) {
+			return "/" + prefix
+		}
+	}
+	
+	return input // Return original if no improvement
+}
+
+// commonPrefix finds the common prefix of two strings
+func commonPrefix(a, b string) string {
+	minLen := len(a)
+	if len(b) < minLen {
+		minLen = len(b)
+	}
+	
+	for i := 0; i < minLen; i++ {
+		if a[i] != b[i] {
+			return a[:i]
+		}
+	}
+	return a[:minLen]
 }
 
 // FormatSlashCommandError formats error messages for slash commands

@@ -30,15 +30,17 @@ type CommandSetter interface {
 }
 
 type chatPage struct {
-	app                  *app.App
-	editor               layout.Container
-	messages             layout.Container
-	layout               layout.SplitPaneLayout
-	session              session.Session
-	completionDialog     dialog.CompletionDialog
-	showCompletionDialog bool
-	commands             []dialog.Command // Commands for slash command processing
-	slashProcessor       *dialog.SlashCommandProcessor
+	app                    *app.App
+	editor                 layout.Container
+	messages               layout.Container
+	layout                 layout.SplitPaneLayout
+	session                session.Session
+	completionDialog       dialog.CompletionDialog
+	showCompletionDialog   bool
+	commands               []dialog.Command // Commands for slash command processing
+	slashProcessor         *dialog.SlashCommandProcessor
+	slashSuggestionDialog  *dialog.SlashSuggestionDialog
+	showSlashSuggestions   bool
 }
 
 type ChatKeyMap struct {
@@ -67,6 +69,9 @@ func (p *chatPage) Init() tea.Cmd {
 		p.layout.Init(),
 		p.completionDialog.Init(),
 	}
+	if p.slashSuggestionDialog != nil {
+		cmds = append(cmds, p.slashSuggestionDialog.Init())
+	}
 	return tea.Batch(cmds...)
 }
 
@@ -78,6 +83,36 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	case dialog.CompletionDialogCloseMsg:
 		p.showCompletionDialog = false
+	case dialog.SlashSuggestionSelectedMsg:
+		// Handle slash suggestion selection
+		p.showSlashSuggestions = false
+		return p, util.CmdHandler(chat.ReplaceInputMsg{Text: msg.Command})
+	case dialog.SlashSuggestionAutofillMsg:
+		// Handle autofill request
+		if p.slashProcessor != nil {
+			return p, util.CmdHandler(chat.GetCurrentInputMsg{})
+		}
+	case chat.CurrentInputMsg:
+		// Handle autofill with common prefix
+		if p.slashProcessor != nil {
+			autofilled := p.slashProcessor.GetCommonPrefix(msg.Text)
+			if autofilled != msg.Text {
+				return p, util.CmdHandler(chat.ReplaceInputMsg{Text: autofilled})
+			}
+		}
+	case chat.InputChangedMsg:
+		// Handle input changes to show/hide suggestions
+		if p.slashProcessor != nil && strings.HasPrefix(strings.TrimSpace(msg.Text), "/") {
+			if p.slashSuggestionDialog != nil {
+				p.slashSuggestionDialog.Show(msg.Text)
+				p.showSlashSuggestions = p.slashSuggestionDialog.IsVisible()
+			}
+		} else {
+			p.showSlashSuggestions = false
+			if p.slashSuggestionDialog != nil {
+				p.slashSuggestionDialog.Hide()
+			}
+		}
 	case chat.SendMsg:
 		cmd := p.sendMessage(msg.Text, msg.Attachments)
 		if cmd != nil {
@@ -140,6 +175,21 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Doesn't forward event if enter key is pressed
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			if keyMsg.String() == "enter" {
+				return p, tea.Batch(cmds...)
+			}
+		}
+	}
+
+	// Handle slash suggestions dialog
+	if p.showSlashSuggestions && p.slashSuggestionDialog != nil {
+		model, cmd := p.slashSuggestionDialog.Update(msg)
+		p.slashSuggestionDialog = model.(*dialog.SlashSuggestionDialog)
+		cmds = append(cmds, cmd)
+
+		// Intercept navigation keys for suggestions
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "up", "down", "ctrl+k", "ctrl+j", "enter", "tab", "esc":
 				return p, tea.Batch(cmds...)
 			}
 		}
@@ -273,6 +323,25 @@ func (p *chatPage) View() string {
 		)
 	}
 
+	// Show slash suggestions dialog
+	if p.showSlashSuggestions && p.slashSuggestionDialog != nil {
+		_, layoutHeight := p.layout.GetSize()
+		editorWidth, editorHeight := p.editor.GetSize()
+
+		p.slashSuggestionDialog.SetSize(editorWidth, 10)
+		overlay := p.slashSuggestionDialog.View()
+
+		if overlay != "" {
+			layoutView = layout.PlaceOverlay(
+				0,
+				layoutHeight-editorHeight-lipgloss.Height(overlay),
+				overlay,
+				layoutView,
+				false,
+			)
+		}
+	}
+
 	return layoutView
 }
 
@@ -314,5 +383,6 @@ func (p *chatPage) SetCommands(commands []dialog.Command) {
 	p.commands = commands
 	if len(commands) > 0 {
 		p.slashProcessor = dialog.NewSlashCommandProcessor(commands)
+		p.slashSuggestionDialog = dialog.NewSlashSuggestionDialog(p.slashProcessor)
 	}
 }

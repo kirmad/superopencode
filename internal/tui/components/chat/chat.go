@@ -25,6 +25,21 @@ type SessionClearedMsg struct{}
 
 type EditorFocusMsg bool
 
+// Messages for input handling and slash suggestions
+type ReplaceInputMsg struct {
+	Text string
+}
+
+type GetCurrentInputMsg struct{}
+
+type CurrentInputMsg struct {
+	Text string
+}
+
+type InputChangedMsg struct {
+	Text string
+}
+
 func header(width int) string {
 	return lipgloss.JoinVertical(
 		lipgloss.Top,

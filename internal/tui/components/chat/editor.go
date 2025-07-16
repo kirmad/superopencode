@@ -151,6 +151,11 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.textarea.SetValue(modifiedValue)
 		return m, nil
+	case ReplaceInputMsg:
+		m.textarea.SetValue(msg.Text)
+		return m, nil
+	case GetCurrentInputMsg:
+		return m, util.CmdHandler(CurrentInputMsg{Text: m.textarea.Value()})
 	case SessionSelectedMsg:
 		if msg.ID != m.session.ID {
 			m.session = msg
@@ -212,7 +217,22 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	}
+	
+	// Store previous value to detect changes
+	previousValue := m.textarea.Value()
+	
 	m.textarea, cmd = m.textarea.Update(msg)
+	
+	// Emit input change event if value changed
+	newValue := m.textarea.Value()
+	if newValue != previousValue {
+		inputChangeCmd := util.CmdHandler(InputChangedMsg{Text: newValue})
+		if cmd != nil {
+			return m, tea.Batch(cmd, inputChangeCmd)
+		}
+		return m, inputChangeCmd
+	}
+	
 	return m, cmd
 }
 
