@@ -16,7 +16,6 @@ import (
 	"github.com/kirmad/superopencode/internal/config"
 	"github.com/kirmad/superopencode/internal/llm/models"
 	toolsPkg "github.com/kirmad/superopencode/internal/llm/tools"
-	"github.com/kirmad/superopencode/internal/detailed_logging"
 	"github.com/kirmad/superopencode/internal/logging"
 	"github.com/kirmad/superopencode/internal/message"
 )
@@ -34,61 +33,9 @@ type copilotClient struct {
 	options         copilotOptions
 	client          openai.Client
 	httpClient      *http.Client
-	detailedLogging bool
 }
 
 type CopilotClient ProviderClient
-
-// messageAdapter implements detailed_logging.Message interface
-type messageAdapter struct {
-	message.Message
-}
-
-func (m messageAdapter) Role() string {
-	return string(m.Message.Role)
-}
-
-func (m messageAdapter) ContentString() string {
-	return m.Message.Content().String()
-}
-
-func (m messageAdapter) Parts() []detailed_logging.ContentPart {
-	parts := make([]detailed_logging.ContentPart, 0, len(m.Message.Parts))
-	for _, part := range m.Message.Parts {
-		parts = append(parts, contentPartAdapter{part})
-	}
-	return parts
-}
-
-// contentPartAdapter implements detailed_logging.ContentPart interface
-type contentPartAdapter struct {
-	message.ContentPart
-}
-
-func (c contentPartAdapter) IsText() bool {
-	_, ok := c.ContentPart.(message.TextContent)
-	return ok
-}
-
-func (c contentPartAdapter) Text() string {
-	if textContent, ok := c.ContentPart.(message.TextContent); ok {
-		return textContent.Text
-	}
-	return ""
-}
-
-func (c contentPartAdapter) Type() string {
-	switch c.ContentPart.(type) {
-	case message.TextContent:
-		return "TEXT"
-	case message.ImageURLContent:
-		return "IMAGE_URL"
-	case message.BinaryContent:
-		return "BINARY"
-	default:
-		return "UNKNOWN"
-	}
-}
 
 // CopilotTokenResponse represents the response from GitHub's token exchange endpoint
 type CopilotTokenResponse struct {
@@ -230,18 +177,12 @@ func newCopilotClient(opts providerClientOptions) CopilotClient {
 	}
 
 	client := openai.NewClient(openaiClientOptions...)
-	
-	// Check if detailed logging is enabled
-	cfg := config.Get()
-	detailedLogging := cfg != nil && cfg.DetailedLog
-	
 	// logging.Debug("Copilot client created", "opts", opts, "copilotOpts", copilotOpts, "model", opts.model)
 	return &copilotClient{
 		providerOptions: opts,
 		options:         copilotOpts,
 		client:          client,
 		httpClient:      httpClient,
-		detailedLogging: detailedLogging,
 	}
 }
 
@@ -391,52 +332,16 @@ func (c *copilotClient) preparedParams(messages []openai.ChatCompletionMessagePa
 }
 
 func (c *copilotClient) send(ctx context.Context, messages []message.Message, tools []toolsPkg.BaseTool) (response *ProviderResponse, err error) {
-	startTime := time.Now()
 	params := c.preparedParams(c.convertMessages(ctx, messages), c.convertTools(tools))
 	cfg := config.Get()
 	var sessionId string
 	requestSeqId := (len(messages) + 1) / 2
-	
-	// Get session ID for both debug and detailed logging
-	if sid, ok := ctx.Value(toolsPkg.SessionIDContextKey).(string); ok {
-		sessionId = sid
-	}
-	
-	// Detailed logging: log request
-	var detailedLogCtx *detailed_logging.RequestContext
-	if c.detailedLogging {
-		detailedLogManager := detailed_logging.GetDetailedLogManager()
-		if detailedLogManager != nil && detailedLogManager.IsEnabled() {
-			clientInfo := detailed_logging.ClientInfo{
-				Model:       string(c.providerOptions.model.ID),
-				Provider:    "copilot",
-				TokenSource: "github",
-				APIEndpoint: "https://api.githubcopilot.com",
-				UserAgent:   "OpenCode/1.0",
-			}
-			detailedLogCtx = detailedLogManager.CreateRequestContext(ctx, clientInfo, toolsPkg.SessionIDContextKey)
-			
-			// Convert messages to detailed logging format
-			adaptedMessages := make([]detailed_logging.Message, len(messages))
-			for i, msg := range messages {
-				adaptedMessages[i] = messageAdapter{msg}
-			}
-			
-			// Convert params to options map for logging
-			options := make(map[string]any)
-			if paramBytes, err := json.Marshal(params); err == nil {
-				json.Unmarshal(paramBytes, &options)
-			}
-			
-			if err := detailedLogManager.LogRequest(detailedLogCtx, adaptedMessages, options); err != nil {
-				logging.Warn("failed to log detailed request", "error", err)
-			}
-		}
-	}
-
 	if cfg.Debug {
 		// jsonData, _ := json.Marshal(params)
 		// logging.Debug("Prepared messages", "messages", string(jsonData))
+		if sid, ok := ctx.Value(toolsPkg.SessionIDContextKey).(string); ok {
+			sessionId = sid
+		}
 		jsonData, _ := json.Marshal(params)
 		if sessionId != "" {
 			filepath := logging.WriteRequestMessageJson(sessionId, requestSeqId, params)
@@ -458,36 +363,15 @@ func (c *copilotClient) send(ctx context.Context, messages []message.Message, to
 		if err != nil {
 			retry, after, retryErr := c.shouldRetry(attempts, err)
 			if retryErr != nil {
-				// Detailed logging: log error response
-				if c.detailedLogging && detailedLogCtx != nil {
-					duration := time.Since(startTime)
-					if err := detailed_logging.GetDetailedLogManager().LogResponse(detailedLogCtx, "", detailed_logging.TokenUsage{}, duration, retryErr); err != nil {
-						logging.Warn("failed to log detailed error response", "error", err)
-					}
-				}
 				return nil, retryErr
 			}
 			if retry {
 				logging.WarnPersist(fmt.Sprintf("Retrying due to rate limit... attempt %d of %d", attempts, maxRetries), logging.PersistTimeArg, time.Millisecond*time.Duration(after+100))
 				select {
 				case <-ctx.Done():
-					// Detailed logging: log context cancellation
-					if c.detailedLogging && detailedLogCtx != nil {
-						duration := time.Since(startTime)
-						if err := detailed_logging.GetDetailedLogManager().LogResponse(detailedLogCtx, "", detailed_logging.TokenUsage{}, duration, ctx.Err()); err != nil {
-							logging.Warn("failed to log detailed cancellation response", "error", err)
-						}
-					}
 					return nil, ctx.Err()
 				case <-time.After(time.Duration(after) * time.Millisecond):
 					continue
-				}
-			}
-			// Detailed logging: log final error response
-			if c.detailedLogging && detailedLogCtx != nil {
-				duration := time.Since(startTime)
-				if err := detailed_logging.GetDetailedLogManager().LogResponse(detailedLogCtx, "", detailed_logging.TokenUsage{}, duration, retryErr); err != nil {
-					logging.Warn("failed to log detailed final error response", "error", err)
 				}
 			}
 			return nil, retryErr
@@ -505,21 +389,6 @@ func (c *copilotClient) send(ctx context.Context, messages []message.Message, to
 			finishReason = message.FinishReasonToolUse
 		}
 
-		// Detailed logging: log response
-		if c.detailedLogging && detailedLogCtx != nil {
-			duration := time.Since(startTime)
-			usage := c.usage(*copilotResponse)
-			tokenUsage := detailed_logging.TokenUsage{
-				PromptTokens:     int(usage.InputTokens),
-				CompletionTokens: int(usage.OutputTokens),
-				TotalTokens:      int(usage.InputTokens + usage.OutputTokens),
-			}
-			
-			if err := detailed_logging.GetDetailedLogManager().LogResponse(detailedLogCtx, content, tokenUsage, duration, nil); err != nil {
-				logging.Warn("failed to log detailed response", "error", err)
-			}
-		}
-
 		return &ProviderResponse{
 			Content:      content,
 			ToolCalls:    toolCalls,
@@ -530,7 +399,6 @@ func (c *copilotClient) send(ctx context.Context, messages []message.Message, to
 }
 
 func (c *copilotClient) stream(ctx context.Context, messages []message.Message, tools []toolsPkg.BaseTool) <-chan ProviderEvent {
-	startTime := time.Now()
 	params := c.preparedParams(c.convertMessages(ctx, messages), c.convertTools(tools))
 	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
 		IncludeUsage: openai.Bool(true),
@@ -539,45 +407,10 @@ func (c *copilotClient) stream(ctx context.Context, messages []message.Message, 
 	cfg := config.Get()
 	var sessionId string
 	requestSeqId := (len(messages) + 1) / 2
-	
-	// Get session ID for both debug and detailed logging
-	if sid, ok := ctx.Value(toolsPkg.SessionIDContextKey).(string); ok {
-		sessionId = sid
-	}
-	
-	// Detailed logging: log request
-	var detailedLogCtx *detailed_logging.RequestContext
-	if c.detailedLogging {
-		detailedLogManager := detailed_logging.GetDetailedLogManager()
-		if detailedLogManager != nil && detailedLogManager.IsEnabled() {
-			clientInfo := detailed_logging.ClientInfo{
-				Model:       string(c.providerOptions.model.ID),
-				Provider:    "copilot",
-				TokenSource: "github",
-				APIEndpoint: "https://api.githubcopilot.com",
-				UserAgent:   "OpenCode/1.0",
-			}
-			detailedLogCtx = detailedLogManager.CreateRequestContext(ctx, clientInfo, toolsPkg.SessionIDContextKey)
-			
-			// Convert messages to detailed logging format
-			adaptedMessages := make([]detailed_logging.Message, len(messages))
-			for i, msg := range messages {
-				adaptedMessages[i] = messageAdapter{msg}
-			}
-			
-			// Convert params to options map for logging
-			options := make(map[string]any)
-			if paramBytes, err := json.Marshal(params); err == nil {
-				json.Unmarshal(paramBytes, &options)
-			}
-			
-			if err := detailedLogManager.LogRequest(detailedLogCtx, adaptedMessages, options); err != nil {
-				logging.Warn("failed to log detailed request", "error", err)
-			}
-		}
-	}
-	
 	if cfg.Debug {
+		if sid, ok := ctx.Value(toolsPkg.SessionIDContextKey).(string); ok {
+			sessionId = sid
+		}
 		jsonData, _ := json.Marshal(params)
 		if sessionId != "" {
 			filepath := logging.WriteRequestMessageJson(sessionId, requestSeqId, params)
@@ -686,21 +519,6 @@ func (c *copilotClient) stream(ctx context.Context, messages []message.Message, 
 					finishReason = message.FinishReasonToolUse
 				}
 
-				// Detailed logging: log response
-				if c.detailedLogging && detailedLogCtx != nil {
-					duration := time.Since(startTime)
-					usage := c.usage(acc.ChatCompletion)
-					tokenUsage := detailed_logging.TokenUsage{
-						PromptTokens:     int(usage.InputTokens),
-						CompletionTokens: int(usage.OutputTokens),
-						TotalTokens:      int(usage.InputTokens + usage.OutputTokens),
-					}
-					
-					if err := detailed_logging.GetDetailedLogManager().LogResponse(detailedLogCtx, currentContent, tokenUsage, duration, nil); err != nil {
-						logging.Warn("failed to log detailed response", "error", err)
-					}
-				}
-
 				eventChan <- ProviderEvent{
 					Type: EventComplete,
 					Response: &ProviderResponse{
@@ -717,13 +535,6 @@ func (c *copilotClient) stream(ctx context.Context, messages []message.Message, 
 			// If there is an error we are going to see if we can retry the call
 			retry, after, retryErr := c.shouldRetry(attempts, err)
 			if retryErr != nil {
-				// Detailed logging: log error response
-				if c.detailedLogging && detailedLogCtx != nil {
-					duration := time.Since(startTime)
-					if err := detailed_logging.GetDetailedLogManager().LogResponse(detailedLogCtx, "", detailed_logging.TokenUsage{}, duration, retryErr); err != nil {
-						logging.Warn("failed to log detailed error response", "error", err)
-					}
-				}
 				eventChan <- ProviderEvent{Type: EventError, Error: retryErr}
 				close(eventChan)
 				return
@@ -739,12 +550,6 @@ func (c *copilotClient) stream(ctx context.Context, messages []message.Message, 
 				select {
 				case <-ctx.Done():
 					// context cancelled
-					if c.detailedLogging && detailedLogCtx != nil {
-						duration := time.Since(startTime)
-						if err := detailed_logging.GetDetailedLogManager().LogResponse(detailedLogCtx, "", detailed_logging.TokenUsage{}, duration, ctx.Err()); err != nil {
-							logging.Warn("failed to log detailed cancellation response", "error", err)
-						}
-					}
 					if ctx.Err() == nil {
 						eventChan <- ProviderEvent{Type: EventError, Error: ctx.Err()}
 					}
@@ -752,13 +557,6 @@ func (c *copilotClient) stream(ctx context.Context, messages []message.Message, 
 					return
 				case <-time.After(time.Duration(after) * time.Millisecond):
 					continue
-				}
-			}
-			// Detailed logging: log final error response
-			if c.detailedLogging && detailedLogCtx != nil {
-				duration := time.Since(startTime)
-				if err := detailed_logging.GetDetailedLogManager().LogResponse(detailedLogCtx, "", detailed_logging.TokenUsage{}, duration, retryErr); err != nil {
-					logging.Warn("failed to log detailed final error response", "error", err)
 				}
 			}
 			eventChan <- ProviderEvent{Type: EventError, Error: retryErr}

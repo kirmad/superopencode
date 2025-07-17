@@ -37,12 +37,6 @@ to assist developers in writing, debugging, and understanding code directly from
   # Run with debug logging in a specific directory
   opencode -d -c /path/to/project
 
-  # Run with automatic todo completion enabled
-  opencode --auto-complete-todos
-
-  # Run with custom max todo continuations
-  opencode --auto-complete-todos --max-todo-continuations 20
-
   # Print version
   opencode -v
 
@@ -53,6 +47,7 @@ to assist developers in writing, debugging, and understanding code directly from
   opencode -p "Explain the use of context in Go" -f json
   `,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// If the help flag is set, show the help message
 		if cmd.Flag("help").Changed {
 			cmd.Help()
 			return nil
@@ -62,33 +57,23 @@ to assist developers in writing, debugging, and understanding code directly from
 			return nil
 		}
 
+		// Load the config
 		debug, _ := cmd.Flags().GetBool("debug")
-		detailedLog, _ := cmd.Flags().GetBool("detailed-log")
 		cwd, _ := cmd.Flags().GetString("cwd")
 		prompt, _ := cmd.Flags().GetString("prompt")
 		outputFormat, _ := cmd.Flags().GetString("output-format")
 		quiet, _ := cmd.Flags().GetBool("quiet")
-		autoCompleteTodos, _ := cmd.Flags().GetBool("auto-complete-todos")
-		maxTodoContinuations, _ := cmd.Flags().GetInt("max-todo-continuations")
-		dangerouslySkipPermissions, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
 
-		if !dangerouslySkipPermissions && os.Getenv("SUPEROPENCODE_DANGEROUSLY_SKIP_PERMISSIONS") == "true" {
-			dangerouslySkipPermissions = true
-		}
+		// Validate format option
 		if !format.IsValid(outputFormat) {
 			return fmt.Errorf("invalid format option: %s\n%s", outputFormat, format.GetHelpText())
 		}
+
 		if cwd != "" {
 			err := os.Chdir(cwd)
 			if err != nil {
 				return fmt.Errorf("failed to change directory: %v", err)
 			}
-		}
-		if autoCompleteTodos {
-			os.Setenv("SUPEROPENCODE_AUTO_COMPLETE_TODOS", "true")
-		}
-		if maxTodoContinuations != 10 {
-			os.Setenv("SUPEROPENCODE_MAX_TODO_CONTINUATIONS", fmt.Sprintf("%d", maxTodoContinuations))
 		}
 		if cwd == "" {
 			c, err := os.Getwd()
@@ -97,47 +82,61 @@ to assist developers in writing, debugging, and understanding code directly from
 			}
 			cwd = c
 		}
-		_, err := config.Load(cwd, debug, detailedLog)
+		_, err := config.Load(cwd, debug)
 		if err != nil {
 			return err
 		}
+
+		// Connect DB, this will also run migrations
 		conn, err := db.Connect()
 		if err != nil {
 			return err
 		}
+
+		// Create main context for the application
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
+
 		app, err := app.New(ctx, conn)
 		if err != nil {
 			logging.Error("Failed to create app: %v", err)
 			return err
 		}
+		// Defer shutdown here so it runs for both interactive and non-interactive modes
 		defer app.Shutdown()
+
+		// Initialize MCP tools early for both modes
 		initMCPTools(ctx, app)
-		if dangerouslySkipPermissions {
-			if err := validateDangerousMode(); err != nil {
-				return fmt.Errorf("dangerous mode validation failed: %w", err)
-			}
-			printDangerousWarning()
-			app.SetDangerousMode(true)
-		}
+
+		// Non-interactive mode
 		if prompt != "" {
-			return app.RunNonInteractive(ctx, prompt, outputFormat, quiet, dangerouslySkipPermissions)
+			// Run non-interactive flow using the App method
+			return app.RunNonInteractive(ctx, prompt, outputFormat, quiet)
 		}
+
+		// Interactive mode
+		// Set up the TUI
 		zone.NewGlobal()
 		program := tea.NewProgram(
 			tui.New(app),
 			tea.WithAltScreen(),
 		)
+
+		// Setup the subscriptions, this will send services events to the TUI
 		ch, cancelSubs := setupSubscriptions(app, ctx)
+
+		// Create a context for the TUI message handler
 		tuiCtx, tuiCancel := context.WithCancel(ctx)
 		var tuiWg sync.WaitGroup
 		tuiWg.Add(1)
+
+		// Set up message handling for the TUI
 		go func() {
 			defer tuiWg.Done()
 			defer logging.RecoverPanic("TUI-message-handler", func() {
 				attemptTUIRecovery(program)
 			})
+
 			for {
 				select {
 				case <-tuiCtx.Done():
@@ -152,52 +151,56 @@ to assist developers in writing, debugging, and understanding code directly from
 				}
 			}
 		}()
+
+		// Cleanup function for when the program exits
 		cleanup := func() {
+			// Shutdown the app
 			app.Shutdown()
+
+			// Cancel subscriptions first
 			cancelSubs()
+
+			// Then cancel TUI message handler
 			tuiCancel()
+
+			// Wait for TUI message handler to finish
 			tuiWg.Wait()
+
 			logging.Info("All goroutines cleaned up")
 		}
+
+		// Run the TUI
 		result, err := program.Run()
 		cleanup()
+
 		if err != nil {
 			logging.Error("TUI error: %v", err)
 			return fmt.Errorf("TUI error: %v", err)
 		}
+
 		logging.Info("TUI exited with result: %v", result)
 		return nil
 	},
 }
 
-func init() {
-	rootCmd.Flags().BoolP("help", "h", false, "Help")
-	rootCmd.Flags().BoolP("version", "v", false, "Version")
-	rootCmd.Flags().BoolP("debug", "d", false, "Debug")
-	rootCmd.Flags().Bool("detailed-log", false, "Enable detailed logging of copilot requests/responses")
-	rootCmd.Flags().StringP("cwd", "c", "", "Current working directory")
-	rootCmd.Flags().StringP("prompt", "p", "", "Prompt to run in non-interactive mode")
-	rootCmd.Flags().StringP("output-format", "f", format.Text.String(),
-		"Output format for non-interactive mode (text, json)")
-	rootCmd.Flags().BoolP("quiet", "q", false, "Hide spinner in non-interactive mode")
-	rootCmd.Flags().Bool("auto-complete-todos", false, "Enable automatic completion of todos until all are done")
-	rootCmd.Flags().Int("max-todo-continuations", 10, "Maximum number of todo continuation attempts per session")
-	rootCmd.Flags().Bool("dangerously-skip-permissions", false, "Skip all permission checks for this session (USE WITH EXTREME CAUTION)")
-	rootCmd.RegisterFlagCompletionFunc("output-format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return format.SupportedFormats, cobra.ShellCompDirectiveNoFileComp
-	})
-}
-
+// attemptTUIRecovery tries to recover the TUI after a panic
 func attemptTUIRecovery(program *tea.Program) {
 	logging.Info("Attempting to recover TUI after panic")
+
+	// We could try to restart the TUI or gracefully exit
+	// For now, we'll just quit the program to avoid further issues
 	program.Quit()
 }
 
 func initMCPTools(ctx context.Context, app *app.App) {
 	go func() {
 		defer logging.RecoverPanic("MCP-goroutine", nil)
+
+		// Create a context with timeout for the initial MCP tools fetch
 		ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
+
+		// Set this up once with proper error handling
 		agent.GetMcpTools(ctxWithTimeout, app.Permissions)
 		logging.Info("MCP message handling goroutine exiting")
 	}()
@@ -214,7 +217,9 @@ func setupSubscriber[T any](
 	go func() {
 		defer wg.Done()
 		defer logging.RecoverPanic(fmt.Sprintf("subscription-%s", name), nil)
+
 		subCh := subscriber(ctx)
+
 		for {
 			select {
 			case event, ok := <-subCh:
@@ -222,7 +227,9 @@ func setupSubscriber[T any](
 					logging.Info("subscription channel closed", "name", name)
 					return
 				}
+
 				var msg tea.Msg = event
+
 				select {
 				case outputCh <- msg:
 				case <-time.After(2 * time.Second):
@@ -241,26 +248,31 @@ func setupSubscriber[T any](
 
 func setupSubscriptions(app *app.App, parentCtx context.Context) (chan tea.Msg, func()) {
 	ch := make(chan tea.Msg, 100)
+
 	wg := sync.WaitGroup{}
-	ctx, cancel := context.WithCancel(parentCtx)
+	ctx, cancel := context.WithCancel(parentCtx) // Inherit from parent context
+
 	setupSubscriber(ctx, &wg, "logging", logging.Subscribe, ch)
 	setupSubscriber(ctx, &wg, "sessions", app.Sessions.Subscribe, ch)
 	setupSubscriber(ctx, &wg, "messages", app.Messages.Subscribe, ch)
 	setupSubscriber(ctx, &wg, "permissions", app.Permissions.Subscribe, ch)
 	setupSubscriber(ctx, &wg, "coderAgent", app.CoderAgent.Subscribe, ch)
+
 	cleanupFunc := func() {
 		logging.Info("Cancelling all subscriptions")
-		cancel()
+		cancel() // Signal all goroutines to stop
+
 		waitCh := make(chan struct{})
 		go func() {
 			defer logging.RecoverPanic("subscription-cleanup", nil)
 			wg.Wait()
 			close(waitCh)
 		}()
+
 		select {
 		case <-waitCh:
 			logging.Info("All subscription goroutines completed successfully")
-			close(ch)
+			close(ch) // Only close after all writers are confirmed done
 		case <-time.After(5 * time.Second):
 			logging.Warn("Timed out waiting for some subscription goroutines to complete")
 			close(ch)
@@ -276,20 +288,22 @@ func Execute() {
 	}
 }
 
-func validateDangerousMode() error {
-	if os.Getenv("PRODUCTION") == "true" {
-		return fmt.Errorf("dangerous mode disabled in production")
-	}
-	if os.Getenv("CI") == "true" || os.Getenv("CONTINUOUS_INTEGRATION") == "true" {
-		fmt.Fprintf(os.Stderr, "⚠️  WARNING: Dangerous mode enabled in CI environment\n")
-	}
-	if os.Geteuid() == 0 {
-		fmt.Fprintf(os.Stderr, "⚠️  WARNING: Running dangerous mode as root user\n")
-	}
-	return nil
-}
+func init() {
+	rootCmd.Flags().BoolP("help", "h", false, "Help")
+	rootCmd.Flags().BoolP("version", "v", false, "Version")
+	rootCmd.Flags().BoolP("debug", "d", false, "Debug")
+	rootCmd.Flags().StringP("cwd", "c", "", "Current working directory")
+	rootCmd.Flags().StringP("prompt", "p", "", "Prompt to run in non-interactive mode")
 
-func printDangerousWarning() {
-	fmt.Fprintf(os.Stderr, "⚠️  DANGEROUS MODE: All permission checks will be bypassed\n")
-	fmt.Fprintf(os.Stderr, "   This session has unrestricted system access\n")
+	// Add format flag with validation logic
+	rootCmd.Flags().StringP("output-format", "f", format.Text.String(),
+		"Output format for non-interactive mode (text, json)")
+
+	// Add quiet flag to hide spinner in non-interactive mode
+	rootCmd.Flags().BoolP("quiet", "q", false, "Hide spinner in non-interactive mode")
+
+	// Register custom validation for the format flag
+	rootCmd.RegisterFlagCompletionFunc("output-format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return format.SupportedFormats, cobra.ShellCompDirectiveNoFileComp
+	})
 }

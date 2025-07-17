@@ -38,12 +38,8 @@ func TestTodoWriteTool_Info(t *testing.T) {
 }
 
 func TestTodoReadTool_EmptySession(t *testing.T) {
-	// Clean up any existing state
-	sessionID := "test-session"
-	delete(todoStorage.todos, sessionID)
-	
 	tool := NewTodoReadTool()
-	ctx := context.WithValue(context.Background(), SessionIDContextKey, sessionID)
+	ctx := context.WithValue(context.Background(), SessionIDContextKey, "test-session")
 
 	call := ToolCall{
 		ID:    "test",

@@ -229,10 +229,6 @@ func (p *chatPage) sendMessage(text string, attachments []message.Attachment) te
 		}
 
 		p.session = session
-		
-		// Auto-approve permissions for this session if dangerous mode is enabled
-		p.app.AutoApproveSessionIfDangerous(session.ID)
-		
 		cmd := p.setSidebar()
 		if cmd != nil {
 			cmds = append(cmds, cmd)

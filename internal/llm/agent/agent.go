@@ -302,15 +302,6 @@ func (a *agent) processGeneration(ctx context.Context, sessionID, content string
 			msgHistory = append(msgHistory, agentMessage, *toolResults)
 			continue
 		}
-
-		// Check for todo-driven continuation before stopping
-		if tools.ShouldContinueForTodos(ctx, sessionID, string(agentMessage.FinishReason())) {
-			todoPrompt := tools.CreateTodoContinuationMessage(sessionID)
-			tools.IncrementContinuationCount(sessionID)
-			msgHistory = append(msgHistory, agentMessage, todoPrompt)
-			continue
-		}
-
 		return AgentEvent{
 			Type:    AgentEventTypeResponse,
 			Message: agentMessage,
@@ -320,9 +311,6 @@ func (a *agent) processGeneration(ctx context.Context, sessionID, content string
 }
 
 func (a *agent) createUserMessage(ctx context.Context, sessionID, content string, attachmentParts []message.ContentPart) (message.Message, error) {
-	// Reset continuation counter when new user message arrives
-	tools.ResetContinuationCount(sessionID)
-	
 	parts := []message.ContentPart{message.TextContent{Text: content}}
 	parts = append(parts, attachmentParts...)
 	return a.messages.Create(ctx, sessionID, message.CreateMessageParams{
