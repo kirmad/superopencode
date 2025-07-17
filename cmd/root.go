@@ -63,6 +63,7 @@ to assist developers in writing, debugging, and understanding code directly from
 		prompt, _ := cmd.Flags().GetString("prompt")
 		outputFormat, _ := cmd.Flags().GetString("output-format")
 		quiet, _ := cmd.Flags().GetBool("quiet")
+		detailedLogs, _ := cmd.Flags().GetBool("detailed-logs")
 
 		// Validate format option
 		if !format.IsValid(outputFormat) {
@@ -82,9 +83,14 @@ to assist developers in writing, debugging, and understanding code directly from
 			}
 			cwd = c
 		}
-		_, err := config.Load(cwd, debug)
+		cfg, err := config.Load(cwd, debug)
 		if err != nil {
 			return err
+		}
+		
+		// Override config with CLI flags if provided
+		if cmd.Flag("detailed-logs").Changed {
+			cfg.DetailedLogs = detailedLogs
 		}
 
 		// Connect DB, this will also run migrations
@@ -301,6 +307,9 @@ func init() {
 
 	// Add quiet flag to hide spinner in non-interactive mode
 	rootCmd.Flags().BoolP("quiet", "q", false, "Hide spinner in non-interactive mode")
+
+	// Add detailed logging flags
+	rootCmd.Flags().Bool("detailed-logs", false, "Enable detailed logging of LLM interactions")
 
 	// Register custom validation for the format flag
 	rootCmd.RegisterFlagCompletionFunc("output-format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

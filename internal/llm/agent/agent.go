@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kirmad/superopencode/internal/config"
+	"github.com/kirmad/superopencode/internal/detailed_logging"
 	"github.com/kirmad/superopencode/internal/llm/models"
 	"github.com/kirmad/superopencode/internal/llm/prompt"
 	"github.com/kirmad/superopencode/internal/llm/provider"
@@ -68,6 +69,7 @@ type agent struct {
 	summarizeProvider provider.Provider
 
 	activeRequests sync.Map
+	detailedLogger *detailed_logging.DetailedLogger
 }
 
 func NewAgent(
@@ -75,22 +77,28 @@ func NewAgent(
 	sessions session.Service,
 	messages message.Service,
 	agentTools []tools.BaseTool,
+	detailedLogger ...*detailed_logging.DetailedLogger,
 ) (Service, error) {
-	agentProvider, err := createAgentProvider(agentName)
+	var logger *detailed_logging.DetailedLogger
+	if len(detailedLogger) > 0 {
+		logger = detailedLogger[0]
+	}
+	
+	agentProvider, err := createAgentProvider(agentName, logger)
 	if err != nil {
 		return nil, err
 	}
 	var titleProvider provider.Provider
 	// Only generate titles for the coder agent
 	if agentName == config.AgentCoder {
-		titleProvider, err = createAgentProvider(config.AgentTitle)
+		titleProvider, err = createAgentProvider(config.AgentTitle, logger)
 		if err != nil {
 			return nil, err
 		}
 	}
 	var summarizeProvider provider.Provider
 	if agentName == config.AgentCoder {
-		summarizeProvider, err = createAgentProvider(config.AgentSummarizer)
+		summarizeProvider, err = createAgentProvider(config.AgentSummarizer, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -105,6 +113,7 @@ func NewAgent(
 		titleProvider:     titleProvider,
 		summarizeProvider: summarizeProvider,
 		activeRequests:    sync.Map{},
+		detailedLogger:    logger,
 	}
 
 	return agent, nil
@@ -522,7 +531,7 @@ func (a *agent) Update(agentName config.AgentName, modelID models.ModelID) (mode
 		return models.Model{}, fmt.Errorf("failed to update config: %w", err)
 	}
 
-	provider, err := createAgentProvider(agentName)
+	provider, err := createAgentProvider(agentName, a.detailedLogger)
 	if err != nil {
 		return models.Model{}, fmt.Errorf("failed to create provider for model %s: %w", modelID, err)
 	}
@@ -703,7 +712,7 @@ func (a *agent) Summarize(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-func createAgentProvider(agentName config.AgentName) (provider.Provider, error) {
+func createAgentProvider(agentName config.AgentName, detailedLogger *detailed_logging.DetailedLogger) (provider.Provider, error) {
 	cfg := config.Get()
 	agentConfig, ok := cfg.Agents[agentName]
 	if !ok {
@@ -752,6 +761,11 @@ func createAgentProvider(agentName config.AgentName) (provider.Provider, error) 
 	)
 	if err != nil {
 		return nil, fmt.Errorf("could not create provider: %v", err)
+	}
+
+	// Wrap with detailed logging if enabled
+	if detailedLogger != nil {
+		agentProvider = detailed_logging.NewLoggingProvider(agentProvider, string(model.Provider), detailedLogger)
 	}
 
 	return agentProvider, nil

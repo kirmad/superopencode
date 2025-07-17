@@ -11,6 +11,7 @@ import (
 
 	"github.com/kirmad/superopencode/internal/config"
 	"github.com/kirmad/superopencode/internal/db"
+	"github.com/kirmad/superopencode/internal/detailed_logging"
 	"github.com/kirmad/superopencode/internal/format"
 	"github.com/kirmad/superopencode/internal/history"
 	"github.com/kirmad/superopencode/internal/llm/agent"
@@ -37,6 +38,8 @@ type App struct {
 	watcherCancelFuncs []context.CancelFunc
 	cancelFuncsMutex   sync.Mutex
 	watcherWG          sync.WaitGroup
+
+	DetailedLogger *detailed_logging.DetailedLogger
 }
 
 func New(ctx context.Context, conn *sql.DB) (*App, error) {
@@ -56,6 +59,18 @@ func New(ctx context.Context, conn *sql.DB) (*App, error) {
 	// Initialize theme based on configuration
 	app.initTheme()
 
+	// Initialize detailed logging if enabled
+	cfg := config.Get()
+	if cfg != nil && cfg.DetailedLogs {
+		detailedLogger, err := detailed_logging.NewDetailedLogger(true)
+		if err != nil {
+			logging.Warn("Failed to initialize detailed logging", "error", err)
+		} else {
+			app.DetailedLogger = detailedLogger
+			logging.Info("Detailed logging enabled")
+		}
+	}
+
 	// Initialize LSP clients in the background
 	go app.initLSPClients(ctx)
 
@@ -71,6 +86,7 @@ func New(ctx context.Context, conn *sql.DB) (*App, error) {
 			app.History,
 			app.LSPClients,
 		),
+		app.DetailedLogger,
 	)
 	if err != nil {
 		logging.Error("Failed to create coder agent", err)
@@ -182,5 +198,12 @@ func (app *App) Shutdown() {
 			logging.Error("Failed to shutdown LSP client", "name", name, "error", err)
 		}
 		cancel()
+	}
+
+	// Shutdown detailed logger if enabled
+	if app.DetailedLogger != nil {
+		if err := app.DetailedLogger.Close(); err != nil {
+			logging.Error("Failed to close detailed logger", "error", err)
+		}
 	}
 }
