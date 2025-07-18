@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  
+  /* Custom colors for log viewer message types */
+  --color-system-50: #eff6ff;
+  --color-system-200: #bfdbfe;
+  --color-system-900: #1e3a8a;
+  
+  --color-user-50: #f0fdf4;
+  --color-user-200: #bbf7d0;
+  --color-user-900: #14532d;
+  
+  --color-assistant-50: #f9fafb;
+  --color-assistant-200: #e5e7eb;
+  --color-assistant-900: #111827;
+  
+  --color-tool-50: #faf5ff;
+  --color-tool-200: #e9d5ff;
+  --color-tool-900: #581c87;
+  
+  --color-tool-response-50: #fff7ed;
+  --color-tool-response-200: #fed7aa;
+  --color-tool-response-900: #9a3412;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
