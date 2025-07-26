@@ -64,6 +64,7 @@ to assist developers in writing, debugging, and understanding code directly from
 		outputFormat, _ := cmd.Flags().GetString("output-format")
 		quiet, _ := cmd.Flags().GetBool("quiet")
 		detailedLogs, _ := cmd.Flags().GetBool("detailed-logs")
+		dangerouslySkipPermissions, _ := cmd.Flags().GetBool("dangerously-skip-permissions")
 
 		// Validate format option
 		if !format.IsValid(outputFormat) {
@@ -117,14 +118,14 @@ to assist developers in writing, debugging, and understanding code directly from
 		// Non-interactive mode
 		if prompt != "" {
 			// Run non-interactive flow using the App method
-			return app.RunNonInteractive(ctx, prompt, outputFormat, quiet)
+			return app.RunNonInteractive(ctx, prompt, outputFormat, quiet, dangerouslySkipPermissions)
 		}
 
 		// Interactive mode
 		// Set up the TUI
 		zone.NewGlobal()
 		program := tea.NewProgram(
-			tui.New(app),
+			tui.New(app, dangerouslySkipPermissions),
 			tea.WithAltScreen(),
 		)
 
@@ -310,6 +311,9 @@ func init() {
 
 	// Add detailed logging flags
 	rootCmd.Flags().Bool("detailed-logs", false, "Enable detailed logging of LLM interactions")
+
+	// Add dangerous permission bypass flag
+	rootCmd.Flags().Bool("dangerously-skip-permissions", false, "⚠️ DANGEROUS: Skip all tool permission checks")
 
 	// Register custom validation for the format flag
 	rootCmd.RegisterFlagCompletionFunc("output-format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

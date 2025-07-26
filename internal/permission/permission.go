@@ -39,6 +39,7 @@ type Service interface {
 	Deny(permission PermissionRequest)
 	Request(opts CreatePermissionRequest) bool
 	AutoApproveSession(sessionID string)
+	IsSessionAutoApproved(sessionID string) bool
 }
 
 type permissionService struct {
@@ -109,6 +110,10 @@ func (s *permissionService) Request(opts CreatePermissionRequest) bool {
 
 func (s *permissionService) AutoApproveSession(sessionID string) {
 	s.autoApproveSessions = append(s.autoApproveSessions, sessionID)
+}
+
+func (s *permissionService) IsSessionAutoApproved(sessionID string) bool {
+	return slices.Contains(s.autoApproveSessions, sessionID)
 }
 
 func NewPermissionService() Service {

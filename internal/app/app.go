@@ -113,7 +113,7 @@ func (app *App) initTheme() {
 }
 
 // RunNonInteractive handles the execution flow when a prompt is provided via CLI flag.
-func (a *App) RunNonInteractive(ctx context.Context, prompt string, outputFormat string, quiet bool) error {
+func (a *App) RunNonInteractive(ctx context.Context, prompt string, outputFormat string, quiet bool, dangerouslySkipPermissions bool) error {
 	logging.Info("Running in non-interactive mode")
 
 	// Start spinner if not in quiet mode
@@ -142,6 +142,10 @@ func (a *App) RunNonInteractive(ctx context.Context, prompt string, outputFormat
 	logging.Info("Created session for non-interactive run", "session_id", sess.ID)
 
 	// Automatically approve all permission requests for this non-interactive session
+	// or if the dangerous flag is set
+	if dangerouslySkipPermissions {
+		logging.Warn("⚠️ DANGEROUS: --dangerously-skip-permissions active. All tool permissions bypassed for session %s", sess.ID)
+	}
 	a.Permissions.AutoApproveSession(sess.ID)
 
 	done, err := a.CoderAgent.Run(ctx, sess.ID, prompt)

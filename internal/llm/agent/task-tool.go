@@ -645,6 +645,11 @@ func (t *taskTool) createTaskSessionWithRetry(ctx context.Context, toolCallID, p
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		taskSession, err := t.sessions.CreateTaskSession(ctx, toolCallID, parentSessionID, fmt.Sprintf("Task: %s", description))
 		if err == nil {
+			// Check if parent session has auto-approval and inherit it
+			if t.permissions.IsSessionAutoApproved(parentSessionID) {
+				logging.InfoPersist(fmt.Sprintf("Task session %s inheriting auto-approval from parent session %s", taskSession.ID, parentSessionID))
+				t.permissions.AutoApproveSession(taskSession.ID)
+			}
 			return taskSession, nil
 		}
 		

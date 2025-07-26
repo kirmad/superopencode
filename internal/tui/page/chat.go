@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/kirmad/superopencode/internal/app"
 	"github.com/kirmad/superopencode/internal/completions"
+	"github.com/kirmad/superopencode/internal/logging"
 	"github.com/kirmad/superopencode/internal/message"
 	"github.com/kirmad/superopencode/internal/session"
 	"github.com/kirmad/superopencode/internal/tui/components/chat"
@@ -30,17 +31,18 @@ type CommandSetter interface {
 }
 
 type chatPage struct {
-	app                    *app.App
-	editor                 layout.Container
-	messages               layout.Container
-	layout                 layout.SplitPaneLayout
-	session                session.Session
-	completionDialog       dialog.CompletionDialog
-	showCompletionDialog   bool
-	commands               []dialog.Command // Commands for slash command processing
-	slashProcessor         *dialog.SlashCommandProcessor
-	slashSuggestionDialog  *dialog.SlashSuggestionDialog
-	showSlashSuggestions   bool
+	app                        *app.App
+	editor                     layout.Container
+	messages                   layout.Container
+	layout                     layout.SplitPaneLayout
+	session                    session.Session
+	completionDialog           dialog.CompletionDialog
+	showCompletionDialog       bool
+	commands                   []dialog.Command // Commands for slash command processing
+	slashProcessor             *dialog.SlashCommandProcessor
+	slashSuggestionDialog      *dialog.SlashSuggestionDialog
+	showSlashSuggestions       bool
+	dangerouslySkipPermissions bool
 }
 
 type ChatKeyMap struct {
@@ -249,6 +251,12 @@ func (p *chatPage) sendMessage(text string, attachments []message.Attachment) te
 			return util.ReportError(err)
 		}
 
+		// Auto-approve permissions if dangerous flag is set
+		if p.dangerouslySkipPermissions {
+			logging.Warn("⚠️ DANGEROUS: --dangerously-skip-permissions active. All tool permissions bypassed for interactive session %s", session.ID)
+			p.app.Permissions.AutoApproveSession(session.ID)
+		}
+
 		p.session = session
 		cmd := p.setSidebar()
 		if cmd != nil {
@@ -373,7 +381,7 @@ func (p *chatPage) BindingKeys() []key.Binding {
 	return bindings
 }
 
-func NewChatPage(app *app.App) tea.Model {
+func NewChatPage(app *app.App, dangerouslySkipPermissions bool) tea.Model {
 	cg := completions.NewFileAndFolderContextGroup()
 	completionDialog := dialog.NewCompletionDialogCmp(cg)
 
@@ -386,12 +394,13 @@ func NewChatPage(app *app.App) tea.Model {
 		layout.WithBorder(true, false, false, false),
 	)
 	return &chatPage{
-		app:              app,
-		editor:           editorContainer,
-		messages:         messagesContainer,
-		completionDialog: completionDialog,
-		commands:         nil, // Will be set later via SetCommands
-		slashProcessor:   nil, // Will be created when commands are set
+		app:                        app,
+		editor:                     editorContainer,
+		messages:                   messagesContainer,
+		completionDialog:           completionDialog,
+		commands:                   nil, // Will be set later via SetCommands
+		slashProcessor:             nil, // Will be created when commands are set
+		dangerouslySkipPermissions: dangerouslySkipPermissions,
 		layout: layout.NewSplitPane(
 			layout.WithLeftPanel(messagesContainer),
 			layout.WithBottomPanel(editorContainer),

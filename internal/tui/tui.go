@@ -105,8 +105,9 @@ type appModel struct {
 	app             *app.App
 	selectedSession session.Session
 
-	showPermissions bool
-	permissions     dialog.PermissionDialogCmp
+	showPermissions           bool
+	permissions               dialog.PermissionDialogCmp
+	dangerouslySkipPermissions bool
 
 	showHelp bool
 	help     dialog.HelpCmp
@@ -898,24 +899,25 @@ func (a appModel) View() string {
 	return appView
 }
 
-func New(app *app.App) tea.Model {
+func New(app *app.App, dangerouslySkipPermissions bool) tea.Model {
 	startPage := page.ChatPage
 	model := &appModel{
-		currentPage:   startPage,
-		loadedPages:   make(map[page.PageID]bool),
-		status:        core.NewStatusCmp(app.LSPClients),
-		help:          dialog.NewHelpCmp(),
-		quit:          dialog.NewQuitCmp(),
-		sessionDialog: dialog.NewSessionDialogCmp(),
-		commandDialog: dialog.NewCommandDialogCmp(),
-		modelDialog:   dialog.NewModelDialogCmp(),
-		permissions:   dialog.NewPermissionDialogCmp(),
-		initDialog:    dialog.NewInitDialogCmp(),
-		themeDialog:   dialog.NewThemeDialogCmp(),
-		app:           app,
-		commands:      []dialog.Command{},
+		currentPage:               startPage,
+		loadedPages:               make(map[page.PageID]bool),
+		status:                    core.NewStatusCmp(app.LSPClients),
+		help:                      dialog.NewHelpCmp(),
+		quit:                      dialog.NewQuitCmp(),
+		sessionDialog:             dialog.NewSessionDialogCmp(),
+		commandDialog:             dialog.NewCommandDialogCmp(),
+		modelDialog:               dialog.NewModelDialogCmp(),
+		permissions:               dialog.NewPermissionDialogCmp(),
+		initDialog:                dialog.NewInitDialogCmp(),
+		themeDialog:               dialog.NewThemeDialogCmp(),
+		app:                       app,
+		commands:                  []dialog.Command{},
+		dangerouslySkipPermissions: dangerouslySkipPermissions,
 		pages: map[page.PageID]tea.Model{
-			page.ChatPage: page.NewChatPage(app),
+			page.ChatPage: page.NewChatPage(app, dangerouslySkipPermissions),
 			page.LogsPage: page.NewLogsPage(),
 		},
 		filepicker: dialog.NewFilepickerCmp(app),
