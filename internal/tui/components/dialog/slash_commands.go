@@ -158,6 +158,14 @@ func (scp *SlashCommandProcessor) findCommand(name string) *Command {
 		}
 	}
 
+	// Try with builtin: prefix
+	builtinCommand := "builtin:" + name
+	for _, cmd := range scp.commands {
+		if scp.matchesCommandName(cmd.ID, builtinCommand) {
+			return &cmd
+		}
+	}
+
 	return nil
 }
 
@@ -179,6 +187,8 @@ func (scp *SlashCommandProcessor) GetAvailableCommands() []string {
 			name = strings.TrimPrefix(name, UserCommandPrefix)
 		} else if strings.HasPrefix(name, ProjectCommandPrefix) {
 			name = strings.TrimPrefix(name, ProjectCommandPrefix)
+		} else if strings.HasPrefix(name, BuiltinCommandPrefix) {
+			name = strings.TrimPrefix(name, BuiltinCommandPrefix)
 		}
 
 		if !seen[name] {
@@ -222,6 +232,8 @@ func (scp *SlashCommandProcessor) GetSuggestions(input string, maxCount int) []S
 			name = strings.TrimPrefix(name, UserCommandPrefix)
 		} else if strings.HasPrefix(name, ProjectCommandPrefix) {
 			name = strings.TrimPrefix(name, ProjectCommandPrefix)
+		} else if strings.HasPrefix(name, BuiltinCommandPrefix) {
+			name = strings.TrimPrefix(name, BuiltinCommandPrefix)
 		}
 		
 		// Skip if we've already added this command name
@@ -261,6 +273,8 @@ func (scp *SlashCommandProcessor) getAllSuggestions(maxCount int) []Suggestion {
 			name = strings.TrimPrefix(name, UserCommandPrefix)
 		} else if strings.HasPrefix(name, ProjectCommandPrefix) {
 			name = strings.TrimPrefix(name, ProjectCommandPrefix)
+		} else if strings.HasPrefix(name, BuiltinCommandPrefix) {
+			name = strings.TrimPrefix(name, BuiltinCommandPrefix)
 		}
 		
 		// Skip if we've already added this command name

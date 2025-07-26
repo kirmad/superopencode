@@ -16,10 +16,26 @@ import (
 const (
 	UserCommandPrefix    = "user:"
 	ProjectCommandPrefix = "project:"
+	BuiltinCommandPrefix = "builtin:"
 )
 
 // namedArgPattern is a regex pattern to find named arguments in the format $NAME
 var namedArgPattern = regexp.MustCompile(`\$([A-Z][A-Z0-9_]*)`)
+
+// loadBuiltinCommands returns the built-in commands available in the application
+func loadBuiltinCommands() []Command {
+	return []Command{
+		{
+			ID:          BuiltinCommandPrefix + "clear",
+			Title:       "clear",
+			Description: "Clear the current session and start fresh",
+			Content:     "Clear the current session and context window",
+			Handler: func(cmd Command) tea.Cmd {
+				return util.CmdHandler(ClearSessionMsg{})
+			},
+		},
+	}
+}
 
 // LoadCustomCommands loads custom commands from both XDG_CONFIG_HOME and project data directory
 func LoadCustomCommands() ([]Command, error) {
@@ -29,6 +45,10 @@ func LoadCustomCommands() ([]Command, error) {
 	}
 
 	var commands []Command
+
+	// Load built-in commands first
+	builtinCommands := loadBuiltinCommands()
+	commands = append(commands, builtinCommands...)
 
 	// Load user commands from XDG_CONFIG_HOME/opencode/commands
 	xdgConfigHome := os.Getenv("XDG_CONFIG_HOME")
@@ -184,4 +204,9 @@ func loadCommandsFromDir(commandsDir string, prefix string) ([]Command, error) {
 type CommandRunCustomMsg struct {
 	Content string
 	Args    map[string]string // Map of argument names to values
+}
+
+// ClearSessionMsg is sent when the /clear command is executed
+type ClearSessionMsg struct {
+	SessionID string // Session ID to clear messages for
 }

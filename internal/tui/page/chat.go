@@ -139,6 +139,9 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			return p, cmd
 		}
+	case dialog.ClearSessionMsg:
+		// Handle /clear command - clear messages from database and UI
+		return p, p.clearSessionAndMessages()
 	case chat.SessionSelectedMsg:
 		if p.session.ID == "" {
 			cmd := p.setSidebar()
@@ -153,11 +156,7 @@ func (p *chatPage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			p.showCompletionDialog = true
 			// Continue sending keys to layout->chat
 		case key.Matches(msg, keyMap.NewSession):
-			p.session = session.Session{}
-			return p, tea.Batch(
-				p.clearSidebar(),
-				util.CmdHandler(chat.SessionClearedMsg{}),
-			)
+			return p, p.clearSessionAndMessages()
 		case key.Matches(msg, keyMap.Cancel):
 			if p.session.ID != "" {
 				// Cancel the current session's generation process
@@ -212,6 +211,28 @@ func (p *chatPage) setSidebar() tea.Cmd {
 
 func (p *chatPage) clearSidebar() tea.Cmd {
 	return p.layout.ClearRightPanel()
+}
+
+// clearSessionAndMessages clears both the UI session and the database messages for true context clearing
+func (p *chatPage) clearSessionAndMessages() tea.Cmd {
+	sessionID := p.session.ID
+	if sessionID != "" {
+		// Clear messages from database to remove LLM context
+		go func() {
+			ctx := context.Background()
+			err := p.app.Messages.DeleteSessionMessages(ctx, sessionID)
+			if err != nil {
+				// Log error but don't block the UI clearing
+				fmt.Printf("Warning: failed to clear session messages: %v\n", err)
+			}
+		}()
+	}
+	// Clear the UI session state
+	p.session = session.Session{}
+	return tea.Batch(
+		p.clearSidebar(),
+		util.CmdHandler(chat.SessionClearedMsg{}),
+	)
 }
 
 func (p *chatPage) sendMessage(text string, attachments []message.Attachment) tea.Cmd {
