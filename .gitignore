@@ -48,3 +48,4 @@ opencode.md
 log-viewer/node_modules/
 log-viewer/server/node_modules/
 superopencode
+logs/*
