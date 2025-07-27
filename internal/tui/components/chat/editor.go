@@ -31,6 +31,9 @@ type editorCmp struct {
 	textarea    textarea.Model
 	attachments []message.Attachment
 	deleteMode  bool
+	// Prompt history
+	promptHistory []string
+	historyIndex  int
 }
 
 type EditorKeyMaps struct {
@@ -125,9 +128,15 @@ func (m *editorCmp) send() tea.Cmd {
 	}
 
 	value := m.textarea.Value()
+	if value != "" {
+		// Store prompt in history (avoid consecutive duplicates)
+		if len(m.promptHistory) == 0 || m.promptHistory[len(m.promptHistory)-1] != value {
+			m.promptHistory = append(m.promptHistory, value)
+		}
+		m.historyIndex = len(m.promptHistory)
+	}
 	m.textarea.Reset()
 	attachments := m.attachments
-
 	m.attachments = nil
 	if value == "" {
 		return nil
@@ -188,6 +197,24 @@ func (m *editorCmp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
+		}
+		// Prompt history navigation
+		if msg.Type == tea.KeyUp {
+			if len(m.promptHistory) > 0 && m.historyIndex > 0 {
+				m.historyIndex--
+				m.textarea.SetValue(m.promptHistory[m.historyIndex])
+			}
+			return m, nil
+		}
+		if msg.Type == tea.KeyDown {
+			if len(m.promptHistory) > 0 && m.historyIndex < len(m.promptHistory)-1 {
+				m.historyIndex++
+				m.textarea.SetValue(m.promptHistory[m.historyIndex])
+			} else if m.historyIndex == len(m.promptHistory)-1 {
+				m.historyIndex = len(m.promptHistory)
+				m.textarea.SetValue("")
+			}
+			return m, nil
 		}
 		if key.Matches(msg, messageKeys.PageUp) || key.Matches(msg, messageKeys.PageDown) ||
 			key.Matches(msg, messageKeys.HalfPageUp) || key.Matches(msg, messageKeys.HalfPageDown) {
