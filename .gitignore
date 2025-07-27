@@ -49,3 +49,5 @@ log-viewer/node_modules/
 log-viewer/server/node_modules/
 superopencode
 logs/*
+.claude-trace/*
+__debug_bin*

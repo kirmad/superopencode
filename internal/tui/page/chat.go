@@ -295,7 +295,7 @@ func (p *chatPage) handleSlashCommand(text string, attachments []message.Attachm
 			}
 		}
 		errorMsg := dialog.FormatSlashCommandError(result.Error, commandName)
-		return util.ReportError(fmt.Errorf(errorMsg))
+		return util.ReportError(fmt.Errorf("%s", errorMsg))
 	}
 
 	// If the command needs arguments dialog, show it

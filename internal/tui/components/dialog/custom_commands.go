@@ -155,6 +155,7 @@ func loadCommandsFromDir(commandsDir string, prefix string) ([]Command, error) {
 			Title:       prefix + commandID,
 			Description: fmt.Sprintf("Custom command from %s", relPath),
 			Content:     string(content), // Store content for slash commands
+			FilePath:    path,           // Store file path for file expansion
 			Handler: func(cmd Command) tea.Cmd {
 				commandContent := string(content)
 

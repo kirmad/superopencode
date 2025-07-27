@@ -82,19 +82,19 @@ type ShellConfig struct {
 
 // Config is the main configuration structure for the application.
 type Config struct {
-	Data             Data                              `json:"data"`
-	WorkingDir       string                            `json:"wd,omitempty"`
-	MCPServers       map[string]MCPServer              `json:"mcpServers,omitempty"`
-	Providers        map[models.ModelProvider]Provider `json:"providers,omitempty"`
-	LSP              map[string]LSPConfig              `json:"lsp,omitempty"`
-	Agents           map[AgentName]Agent               `json:"agents,omitempty"`
-	Debug            bool                              `json:"debug,omitempty"`
-	DebugLSP         bool                              `json:"debugLSP,omitempty"`
-	ContextPaths     []string                          `json:"contextPaths,omitempty"`
-	TUI              TUIConfig                         `json:"tui"`
-	Shell            ShellConfig                       `json:"shell,omitempty"`
-	AutoCompact      bool                              `json:"autoCompact,omitempty"`
-	DetailedLogs     bool                              `json:"detailedLogs,omitempty"`
+	Data         Data                              `json:"data"`
+	WorkingDir   string                            `json:"wd,omitempty"`
+	MCPServers   map[string]MCPServer              `json:"mcpServers,omitempty"`
+	Providers    map[models.ModelProvider]Provider `json:"providers,omitempty"`
+	LSP          map[string]LSPConfig              `json:"lsp,omitempty"`
+	Agents       map[AgentName]Agent               `json:"agents,omitempty"`
+	Debug        bool                              `json:"debug,omitempty"`
+	DebugLSP     bool                              `json:"debugLSP,omitempty"`
+	ContextPaths []string                          `json:"contextPaths,omitempty"`
+	TUI          TUIConfig                         `json:"tui"`
+	Shell        ShellConfig                       `json:"shell,omitempty"`
+	AutoCompact  bool                              `json:"autoCompact,omitempty"`
+	DetailedLogs bool                              `json:"detailedLogs,omitempty"`
 }
 
 // Application constants

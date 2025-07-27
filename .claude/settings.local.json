@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__perplexity-mcp__perplexity_search_web",
+      "WebFetch(domain:docs.anthropic.com)"
+    ],
+    "deny": []
+  }
+}

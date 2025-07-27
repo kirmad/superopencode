@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/kirmad/superopencode/internal/llm/prompt"
 )
 
 // SlashCommandProcessor handles parsing and processing of slash commands
@@ -98,9 +100,18 @@ func (scp *SlashCommandProcessor) ProcessSlashCommand(input string) *SlashComman
 		combinedContent = commandContent
 	}
 
+	// Expand @file mentions in the slash command content
+	// Use the command's file path as base path if available, otherwise fall back to CWD
+	var expandedContent string
+	if command.FilePath != "" {
+		expandedContent = prompt.ExpandFileReferencesWithBasePath(combinedContent, command.FilePath)
+	} else {
+		expandedContent = prompt.ExpandFileReferences(combinedContent)
+	}
+
 	processed := &ProcessedCommand{
 		Command:         command,
-		Content:         combinedContent,
+		Content:         expandedContent,
 		Args:            make(map[string]string),
 		HasNamedArgs:    hasNamedArgs,
 		RemainingText:   remainingText,

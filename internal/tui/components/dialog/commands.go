@@ -17,6 +17,7 @@ type Command struct {
 	Title       string
 	Description string
 	Content     string // Raw content for slash commands
+	FilePath    string // Path to the command file for file expansion base path
 	Handler     func(cmd Command) tea.Cmd
 }
 
