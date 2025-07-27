@@ -1,0 +1,31 @@
+{
+  "copilot": {
+    "enable_copilot": true,
+    "auto_install": true,
+    "fallback_to_gopls": true,
+    "chat_enabled": true,
+    "completion_enabled": true,
+    "log_level": "debug",
+    "performance": {
+      "max_completion_time": 3000,
+      "cache_enabled": true,
+      "cache_size": 100
+    },
+    "security": {
+      "disable_telemetry": false
+    },
+    "agent_config": {
+      "coding_agent": true,
+      "debugging_agent": true
+    }
+  },
+  "lsp": {
+    "gopls": {
+      "enabled": true,
+      "command": "gopls",
+      "args": ["-logfile=/tmp/gopls.log", "-v"]
+    }
+  },
+  "debug": true,
+  "debugLSP": true
+}

@@ -754,6 +754,24 @@ func createAgentProvider(agentName config.AgentName, detailedLogger *detailed_lo
 				provider.WithAnthropicShouldThinkFn(provider.DefaultShouldThinkFn),
 			),
 		)
+	} else if model.Provider == models.ProviderCopilot {
+		copilotOptions := []provider.CopilotOption{}
+		
+		// Always set base URL - use configured value or default
+		baseURL := providerCfg.BaseURL
+		if baseURL == "" {
+			baseURL = "https://api.githubcopilot.com"
+		}
+		copilotOptions = append(copilotOptions, provider.WithCopilotBaseURL(baseURL))
+		logging.Debug("Setting Copilot base URL", "baseURL", baseURL, "configured", providerCfg.BaseURL)
+		
+		// Add reasoning effort for reasoning-capable models
+		if model.CanReason {
+			copilotOptions = append(copilotOptions, provider.WithCopilotReasoningEffort(agentConfig.ReasoningEffort))
+		}
+		
+		// Always pass options for Copilot
+		opts = append(opts, provider.WithCopilotOptions(copilotOptions...))
 	}
 	agentProvider, err := provider.NewProvider(
 		model.Provider,

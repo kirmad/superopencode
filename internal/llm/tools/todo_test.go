@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -56,7 +57,7 @@ func TestTodoReadTool_EmptySession(t *testing.T) {
 		t.Errorf("Expected success, got error: %s", response.Content)
 	}
 
-	if response.Content != "No todos found for this session." {
+	if !strings.Contains(response.Content, "No todos found for this session.") {
 		t.Errorf("Expected empty message, got: %s", response.Content)
 	}
 }

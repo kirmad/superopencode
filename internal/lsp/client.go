@@ -127,6 +127,9 @@ func (c *Client) RegisterServerRequestHandler(method string, handler ServerReque
 }
 
 func (c *Client) InitializeLSPClient(ctx context.Context, workspaceDir string) (*protocol.InitializeResult, error) {
+	// Detect server type for specialized initialization
+	serverType := c.detectServerType()
+	
 	initParams := &protocol.InitializeParams{
 		WorkspaceFoldersInitializeParams: protocol.WorkspaceFoldersInitializeParams{
 			WorkspaceFolders: []protocol.WorkspaceFolder{
@@ -140,7 +143,7 @@ func (c *Client) InitializeLSPClient(ctx context.Context, workspaceDir string) (
 		XInitializeParams: protocol.XInitializeParams{
 			ProcessID: int32(os.Getpid()),
 			ClientInfo: &protocol.ClientInfo{
-				Name:    "mcp-language-server",
+				Name:    "opencode-lsp",
 				Version: "0.1.0",
 			},
 			RootPath: workspaceDir,
@@ -190,17 +193,7 @@ func (c *Client) InitializeLSPClient(ctx context.Context, workspaceDir string) (
 				},
 				Window: protocol.WindowClientCapabilities{},
 			},
-			InitializationOptions: map[string]any{
-				"codelenses": map[string]bool{
-					"generate":           true,
-					"regenerate_cgo":     true,
-					"test":               true,
-					"tidy":               true,
-					"upgrade_dependency": true,
-					"vendor":             true,
-					"vulncheck":          false,
-				},
-			},
+			InitializationOptions: c.getInitializationOptions(serverType),
 		},
 	}
 
@@ -349,6 +342,7 @@ const (
 	ServerTypeTypeScript
 	ServerTypeRust
 	ServerTypePython
+	ServerTypeCopilot
 	ServerTypeGeneric
 )
 
@@ -369,6 +363,8 @@ func (c *Client) detectServerType() ServerType {
 		return ServerTypeRust
 	case strings.Contains(cmdPath, "pyright") || strings.Contains(cmdPath, "pylsp") || strings.Contains(cmdPath, "python"):
 		return ServerTypePython
+	case strings.Contains(cmdPath, "copilot-language-server") || strings.Contains(cmdPath, "copilot"):
+		return ServerTypeCopilot
 	default:
 		return ServerTypeGeneric
 	}
@@ -429,6 +425,9 @@ func (c *Client) pingServerByType(ctx context.Context, serverType ServerType) er
 	case ServerTypeRust:
 		// For Rust, workspace/symbol works well
 		return c.pingWithWorkspaceSymbol(ctx)
+	case ServerTypeCopilot:
+		// For GitHub Copilot Language Server, use a lightweight ping
+		return c.pingCopilotServer(ctx)
 	default:
 		// Default ping method
 		return c.pingWithWorkspaceSymbol(ctx)
@@ -578,6 +577,50 @@ func (c *Client) pingWithWorkspaceSymbol(ctx context.Context) error {
 func (c *Client) pingWithServerCapabilities(ctx context.Context) error {
 	// This is a very lightweight request that should work for most servers
 	return c.Notify(ctx, "$/cancelRequest", struct{ ID int }{ID: -1})
+}
+
+// pingCopilotServer tries to ping the GitHub Copilot Language Server
+func (c *Client) pingCopilotServer(ctx context.Context) error {
+	// GitHub Copilot Language Server responds well to workspace/symbol requests
+	// but we'll use a very lightweight ping first
+	if err := c.pingWithServerCapabilities(ctx); err == nil {
+		return nil
+	}
+	
+	// If that fails, try workspace/symbol as fallback
+	return c.pingWithWorkspaceSymbol(ctx)
+}
+
+// getInitializationOptions returns server-specific initialization options
+func (c *Client) getInitializationOptions(serverType ServerType) map[string]any {
+	switch serverType {
+	case ServerTypeCopilot:
+		// GitHub Copilot Language Server initialization options
+		return map[string]any{
+			"editorConfiguration": map[string]any{
+				"enableAutoCompletions":  true,
+				"enableSnippetCompletion": true,
+				"enableChatCompletions":   true,
+				"enableCodeActions":       true,
+			},
+		}
+	case ServerTypeGo:
+		// gopls initialization options
+		return map[string]any{
+			"codelenses": map[string]bool{
+				"generate":           true,
+				"regenerate_cgo":     true,
+				"test":               true,
+				"tidy":               true,
+				"upgrade_dependency": true,
+				"vendor":             true,
+				"vulncheck":          false,
+			},
+		}
+	default:
+		// Default options for unknown servers
+		return map[string]any{}
+	}
 }
 
 type OpenFileInfo struct {

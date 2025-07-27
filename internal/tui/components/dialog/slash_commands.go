@@ -252,8 +252,8 @@ func (scp *SlashCommandProcessor) GetSuggestions(input string, maxCount int) []S
 			continue
 		}
 		
-		// Check if the command name starts with the partial input (case insensitive)
-		if strings.HasPrefix(strings.ToLower(name), partial) {
+		// Fuzzy match: partial input is a substring (case insensitive)
+		if strings.Contains(strings.ToLower(name), partial) {
 			suggestion := Suggestion{
 				Command:     name,
 				Title:       cmd.Title,

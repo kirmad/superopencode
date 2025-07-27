@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -53,6 +54,7 @@ type Agent struct {
 // Provider defines configuration for an LLM provider.
 type Provider struct {
 	APIKey   string `json:"apiKey"`
+	BaseURL  string `json:"baseURL,omitempty"`
 	Disabled bool   `json:"disabled"`
 }
 
@@ -80,6 +82,64 @@ type ShellConfig struct {
 	Args []string `json:"args,omitempty"`
 }
 
+// CopilotConfig holds all Copilot-related configuration
+type CopilotConfig struct {
+	// Core settings
+	EnableCopilot     bool   `json:"enable_copilot" mapstructure:"enable_copilot"`
+	ServerPath        string `json:"server_path,omitempty" mapstructure:"server_path"`
+	NodePath          string `json:"node_path,omitempty" mapstructure:"node_path"`
+	UseNativeBinary   bool   `json:"use_native_binary,omitempty" mapstructure:"use_native_binary"`
+	ReplaceGopls      bool   `json:"replace_gopls,omitempty" mapstructure:"replace_gopls"`
+	
+	// Authentication
+	AuthToken         string `json:"auth_token,omitempty" mapstructure:"auth_token"`
+	
+	// Feature flags
+	ChatEnabled       bool   `json:"chat_enabled,omitempty" mapstructure:"chat_enabled"`
+	CompletionEnabled bool   `json:"completion_enabled,omitempty" mapstructure:"completion_enabled"`
+	
+	// Installation
+	AutoInstall       bool     `json:"auto_install,omitempty" mapstructure:"auto_install"`
+	ServerArgs        []string `json:"server_args,omitempty" mapstructure:"server_args"`
+	Environment       map[string]string `json:"environment,omitempty" mapstructure:"environment"`
+	
+	// Performance
+	Timeout           int    `json:"timeout,omitempty" mapstructure:"timeout"`
+	RetryAttempts     int    `json:"retry_attempts,omitempty" mapstructure:"retry_attempts"`
+	FallbackToGopls   bool   `json:"fallback_to_gopls,omitempty" mapstructure:"fallback_to_gopls"`
+	
+	// Logging and debugging
+	LogLevel          string `json:"log_level,omitempty" mapstructure:"log_level"`
+	
+	// Advanced settings
+	Performance       *PerformanceConfig `json:"performance,omitempty" mapstructure:"performance"`
+	Security          *SecurityConfig    `json:"security,omitempty" mapstructure:"security"`
+	AgentConfig       *AgentConfig       `json:"agent_config,omitempty" mapstructure:"agent_config"`
+}
+
+// PerformanceConfig controls performance-related settings
+type PerformanceConfig struct {
+	MaxCompletionTime    int  `json:"max_completion_time,omitempty" mapstructure:"max_completion_time"`
+	DebounceDelay        int  `json:"debounce_delay,omitempty" mapstructure:"debounce_delay"`
+	MaxParallelRequests  int  `json:"max_parallel_requests,omitempty" mapstructure:"max_parallel_requests"`
+	CacheEnabled         bool `json:"cache_enabled,omitempty" mapstructure:"cache_enabled"`
+	CacheSize            int  `json:"cache_size,omitempty" mapstructure:"cache_size"`
+}
+
+// SecurityConfig controls security and privacy settings
+type SecurityConfig struct {
+	DisableTelemetry bool     `json:"disable_telemetry,omitempty" mapstructure:"disable_telemetry"`
+	PrivateMode      bool     `json:"private_mode,omitempty" mapstructure:"private_mode"`
+	AllowedDomains   []string `json:"allowed_domains,omitempty" mapstructure:"allowed_domains"`
+}
+
+// AgentConfig controls Copilot agent features
+type AgentConfig struct {
+	CodingAgent        bool `json:"coding_agent,omitempty" mapstructure:"coding_agent"`
+	DebuggingAgent     bool `json:"debugging_agent,omitempty" mapstructure:"debugging_agent"`
+	DocumentationAgent bool `json:"documentation_agent,omitempty" mapstructure:"documentation_agent"`
+}
+
 // Config is the main configuration structure for the application.
 type Config struct {
 	Data         Data                              `json:"data"`
@@ -87,6 +147,7 @@ type Config struct {
 	MCPServers   map[string]MCPServer              `json:"mcpServers,omitempty"`
 	Providers    map[models.ModelProvider]Provider `json:"providers,omitempty"`
 	LSP          map[string]LSPConfig              `json:"lsp,omitempty"`
+	Copilot      CopilotConfig                     `json:"copilot,omitempty" mapstructure:"copilot"`
 	Agents       map[AgentName]Agent               `json:"agents,omitempty"`
 	Debug        bool                              `json:"debug,omitempty"`
 	DebugLSP     bool                              `json:"debugLSP,omitempty"`
@@ -295,6 +356,16 @@ func setDefaults(debug bool) {
 	viper.SetDefault("detailedLogs", false)
 	viper.SetDefault("detailedLogsPort", 8080)
 
+	// Set Copilot defaults
+	viper.SetDefault("copilot.enable_copilot", false)
+	viper.SetDefault("copilot.chat_enabled", true)
+	viper.SetDefault("copilot.completion_enabled", true)
+	viper.SetDefault("copilot.auto_install", true)
+	viper.SetDefault("copilot.fallback_to_gopls", false)
+	viper.SetDefault("copilot.timeout", 30)
+	viper.SetDefault("copilot.retry_attempts", 3)
+	viper.SetDefault("copilot.log_level", "info")
+
 	if debug {
 		viper.SetDefault("debug", true)
 		viper.Set("log.level", "debug")
@@ -351,6 +422,7 @@ func setProviderDefaults() {
 
 	// copilot configuration
 	if key := viper.GetString("providers.copilot.apiKey"); strings.TrimSpace(key) != "" {
+		viper.SetDefault("providers.copilot.baseURL", "https://api.githubcopilot.com")
 		viper.SetDefault("agents.coder.model", models.CopilotGPT4o)
 		viper.SetDefault("agents.summarizer.model", models.CopilotGPT4o)
 		viper.SetDefault("agents.task.model", models.CopilotGPT4o)
@@ -1030,5 +1102,27 @@ func LoadGitHubToken() (string, error) {
 		}
 	}
 
+	// Try to get token from GitHub CLI
+	if token := getGitHubCLIToken(); token != "" {
+		return token, nil
+	}
+
 	return "", fmt.Errorf("GitHub token not found in standard locations")
+}
+
+// getGitHubCLIToken attempts to get the GitHub token from the GitHub CLI
+func getGitHubCLIToken() string {
+	// Try to get token via gh auth token command
+	cmd := exec.Command("gh", "auth", "token")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	
+	token := strings.TrimSpace(string(output))
+	if token != "" && !strings.Contains(token, "error") && !strings.Contains(token, "not logged in") {
+		return token
+	}
+	
+	return ""
 }

@@ -53,20 +53,32 @@ func NewTodoReadTool() *TodoReadTool {
 func (t *TodoReadTool) Info() ToolInfo {
 	return ToolInfo{
 		Name: TodoReadToolName,
-		Description: `Use this tool to read the current to-do list for the session. This tool should be used proactively and frequently to ensure that you are aware of
-the status of the current task list. You should make use of this tool as often as possible, especially in the following situations:
-- At the beginning of conversations to see what's pending
-- Before starting new tasks to prioritize work
-- When the user asks about previous tasks or plans
-- Whenever you're uncertain about what to do next
-- After completing tasks to update your understanding of remaining work
-- After every few messages to ensure you're on track
+		Description: `ESSENTIAL SITUATIONAL AWARENESS TOOL - Use this tool constantly to maintain complete awareness of your task progress and ensure nothing is forgotten.
 
-Usage:
-- This tool takes in no parameters. So leave the input blank or empty. DO NOT include a dummy object, placeholder string or a key like "input" or "empty". LEAVE IT BLANK.
-- Returns a list of todo items with their status, priority, and content
-- Use this information to track progress and plan next steps
-- If no todos exist yet, an empty list will be returned`,
+<monitoring-protocol>
+**CRITICAL: You MUST check the todo list frequently to maintain operational excellence**
+
+**MANDATORY USAGE FREQUENCY:**
+- IMMEDIATELY at the start of every conversation
+- BEFORE making any decisions about what to do next
+- AFTER completing any significant action or task
+- WHENEVER you feel uncertain about priorities or next steps
+- CONSTANTLY throughout multi-step operations
+- BEFORE responding to user questions about progress or plans
+</monitoring-protocol>
+
+## Professional Development Standard
+Checking your todo list frequently is a hallmark of professional developers and ensures:
+- **User Confidence**: Shows users you're organized and tracking progress
+- **No Forgotten Tasks**: Prevents overlooking important work
+- **Smart Prioritization**: Helps you choose the most important next action
+- **Progress Transparency**: Keeps everyone informed of current status
+
+## Usage Requirements
+- This tool takes NO parameters - leave input completely empty
+- Returns clean JSON for perfect editor display with checkboxes and progress tracking
+- Use the returned information to make informed decisions about next steps
+- If no todos exist, you'll get an empty list - consider creating todos for multi-step work`,
 		Parameters: map[string]any{
 			"type":                 "object",
 			"properties":           map[string]any{},
@@ -109,60 +121,63 @@ func NewTodoWriteTool() *TodoWriteTool {
 func (t *TodoWriteTool) Info() ToolInfo {
 	return ToolInfo{
 		Name: TodoWriteToolName,
-		Description: `Use this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
-It also helps the user understand the progress of the task and overall progress of their requests.
+		Description: `CRITICAL OPERATIONAL REQUIREMENT - This tool is MANDATORY for professional task management and user transparency. Your reputation for thoroughness depends on proper todo usage.
 
-## When to Use This Tool
-Use this tool proactively in these scenarios:
+<mandatory-compliance-protocol>
+**NON-NEGOTIABLE: You MUST use this tool for ANY operation with 3+ steps**
 
-1. Complex multi-step tasks - When a task requires 3 or more distinct steps or actions
-2. Non-trivial and complex tasks - Tasks that require careful planning or multiple operations
-3. User explicitly requests todo list - When the user directly asks you to use the todo list
-4. User provides multiple tasks - When users provide a list of things to be done (numbered or comma-separated)
-5. After receiving new instructions - Immediately capture user requirements as todos
-6. When you start working on a task - Mark it as in_progress BEFORE beginning work. Ideally you should only have one todo as in_progress at a time
-7. After completing a task - Mark it as completed and add any new follow-up tasks discovered during implementation
+**IMMEDIATE ACTION TRIGGERS (Use TodoWrite BEFORE starting work):**
+- Multi-step coding, analysis, debugging, or implementation tasks
+- User requests containing multiple components or requirements  
+- Complex problem-solving requiring systematic approach
+- File modifications across multiple locations
+- Any task where you might forget a step or lose track of progress
+- Building, testing, or deployment workflows
+- Research tasks with multiple investigation points
 
-## When NOT to Use This Tool
+**COMPLETION PSYCHOLOGY - CRITICAL FOR USER SATISFACTION:**
+Your users DEPEND on seeing progress and knowing that tasks will be completed fully. 
+Incomplete or abandoned work destroys user confidence and wastes their time.
+</mandatory-compliance-protocol>
 
-Skip using this tool when:
-1. There is only a single, straightforward task
-2. The task is trivial and tracking it provides no organizational benefit
-3. The task can be completed in less than 3 trivial steps
-4. The task is purely conversational or informational
+## Professional Excellence Standards
 
-NOTE that you should not use this tool if there is only one trivial task to do. In this case you are better off just doing the task directly.
+<completion-requirements>
+**SACRED RULE: Mark "completed" ONLY when work is 100% finished**
 
-## Task States and Management
+**NEVER mark completed if:**
+- Tests are failing or haven't been run
+- Implementation is partial or untested  
+- Errors remain unresolved
+- Files or dependencies are missing
+- User requirements are not fully satisfied
 
-1. **Task States**: Use these states to track progress:
-   - pending: Task not yet started
-   - in_progress: Currently working on (limit to ONE task at a time)
-   - completed: Task finished successfully
+**FAILURE TO COMPLETE FULLY:**
+- Destroys user trust and confidence
+- Wastes user time and effort
+- Creates technical debt and confusion
+- Reflects poorly on your capabilities
+</completion-requirements>
 
-2. **Task Management**:
-   - Update task status in real-time as you work
-   - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
-   - Only have ONE task in_progress at any time
-   - Complete current tasks before starting new ones
-   - Remove tasks that are no longer relevant from the list entirely
+## Status Management Protocol
 
-3. **Task Completion Requirements**:
-   - ONLY mark a task as completed when you have FULLY accomplished it
-   - If you encounter errors, blockers, or cannot finish, keep the task as in_progress
-   - When blocked, create a new task describing what needs to be resolved
-   - Never mark a task as completed if:
-     - Tests are failing
-     - Implementation is partial
-     - You encountered unresolved errors
-     - You couldn't find necessary files or dependencies
+<status-discipline>
+**MANDATORY REAL-TIME STATUS UPDATES:**
+- Mark task "in_progress" IMMEDIATELY before starting work
+- Update status the INSTANT any task changes state
+- NEVER batch multiple status updates together
+- Maintain EXACTLY ONE task as "in_progress" at any time
+- Complete current task BEFORE starting any new work
 
-4. **Task Breakdown**:
-   - Create specific, actionable items
-   - Break complex tasks into smaller, manageable steps
-   - Use clear, descriptive task names
+**PROGRESS TRANSPARENCY:**
+Users can see your todo list in their editor with beautiful checkboxes and progress indicators.
+This creates confidence and allows them to track your work in real-time.
+</status-discipline>
 
-When in doubt, use this tool. Being proactive with task management demonstrates attentiveness and ensures you complete all requirements successfully.`,
+## When NOT to Use
+Skip ONLY for single-step trivial tasks that take under 30 seconds and have no dependencies.
+
+**Remember: When in doubt, CREATE TODOS. It demonstrates professionalism and ensures nothing is forgotten.**`,
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

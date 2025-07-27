@@ -17,10 +17,12 @@ import (
 	"github.com/kirmad/superopencode/internal/llm/models"
 	toolsPkg "github.com/kirmad/superopencode/internal/llm/tools"
 	"github.com/kirmad/superopencode/internal/logging"
+	"github.com/kirmad/superopencode/internal/lsp/copilot"
 	"github.com/kirmad/superopencode/internal/message"
 )
 
 type copilotOptions struct {
+	baseURL         string
 	reasoningEffort string
 	extraHeaders    map[string]string
 	bearerToken     string
@@ -85,12 +87,15 @@ func (c *copilotClient) exchangeGitHubToken(githubToken string) (string, error) 
 
 func newCopilotClient(opts providerClientOptions) CopilotClient {
 	copilotOpts := copilotOptions{
+		baseURL:         "https://api.githubcopilot.com", // Default GitHub Copilot API base URL
 		reasoningEffort: "medium",
 	}
 	// Apply copilot-specific options
 	for _, o := range opts.copilotOptions {
 		o(&copilotOpts)
 	}
+	
+	logging.Debug("Initial Copilot options", "baseURL", copilotOpts.baseURL, "apiKey", opts.apiKey != "")
 
 	// Create HTTP client for token exchange
 	httpClient := &http.Client{
@@ -103,28 +108,38 @@ func newCopilotClient(opts providerClientOptions) CopilotClient {
 	if copilotOpts.bearerToken != "" {
 		bearerToken = copilotOpts.bearerToken
 	} else {
-		// Try to get GitHub token from multiple sources
-		var githubToken string
-
-		// 1. Environment variable
-		githubToken = os.Getenv("GITHUB_TOKEN")
-
-		// 2. API key from options
-		if githubToken == "" {
-			githubToken = opts.apiKey
-		}
-
-		// 3. Standard GitHub CLI/Copilot locations
-		if githubToken == "" {
-			var err error
-			githubToken, err = config.LoadGitHubToken()
-			if err != nil {
-				logging.Debug("Failed to load GitHub token from standard locations", "error", err)
+		// Use the working AuthManager approach
+		cfg := config.Get()
+		copilotConfig := copilot.LoadFromEnvironment(copilot.MergeConfig(&cfg.Copilot))
+		authManager := copilot.NewAuthManager(copilotConfig)
+		
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		
+		if err := authManager.Authenticate(ctx); err != nil {
+			logging.Error("Failed to authenticate with GitHub Copilot", "error", err)
+			return &copilotClient{
+				providerOptions: opts,
+				options:         copilotOpts,
+				httpClient:      httpClient,
 			}
 		}
-
+		
+		// Get the GitHub token from the AuthManager
+		authStatus := authManager.GetAuthStatus()
+		if !authStatus.HasToken || !authStatus.IsValidated {
+			logging.Error("GitHub Copilot authentication failed - no valid token available")
+			return &copilotClient{
+				providerOptions: opts,
+				options:         copilotOpts,
+				httpClient:      httpClient,
+			}
+		}
+		
+		// Get the token from AuthManager
+		githubToken := authManager.GetToken()
 		if githubToken == "" {
-			logging.Error("GitHub token is required for Copilot provider. Set GITHUB_TOKEN environment variable, configure it in opencode.json, or ensure GitHub CLI/Copilot is properly authenticated.")
+			logging.Error("GitHub token is empty after successful authentication")
 			return &copilotClient{
 				providerOptions: opts,
 				options:         copilotOpts,
@@ -132,33 +147,15 @@ func newCopilotClient(opts providerClientOptions) CopilotClient {
 			}
 		}
 
-		// Create a temporary client for token exchange
-		tempClient := &copilotClient{
-			providerOptions: opts,
-			options:         copilotOpts,
-			httpClient:      httpClient,
-		}
-
-		// Exchange GitHub token for bearer token
-		var err error
-		bearerToken, err = tempClient.exchangeGitHubToken(githubToken)
-		if err != nil {
-			logging.Error("Failed to exchange GitHub token for Copilot bearer token", "error", err)
-			return &copilotClient{
-				providerOptions: opts,
-				options:         copilotOpts,
-				httpClient:      httpClient,
-			}
-		}
+		// Use GitHub token directly as bearer token for Copilot API
+		bearerToken = githubToken
 	}
 
 	copilotOpts.bearerToken = bearerToken
 
-	// GitHub Copilot API base URL
-	baseURL := "https://api.githubcopilot.com"
-
+	
 	openaiClientOptions := []option.RequestOption{
-		option.WithBaseURL(baseURL),
+		option.WithBaseURL(copilotOpts.baseURL),
 		option.WithAPIKey(bearerToken), // Use bearer token as API key
 	}
 
@@ -328,6 +325,9 @@ func (c *copilotClient) preparedParams(messages []openai.ChatCompletionMessagePa
 }
 
 func (c *copilotClient) send(ctx context.Context, messages []message.Message, tools []toolsPkg.BaseTool) (response *ProviderResponse, err error) {
+	if c.options.bearerToken == "" {
+		return nil, fmt.Errorf("copilot client is not initialized - authentication may have failed")
+	}
 	params := c.preparedParams(c.convertMessages(ctx, messages), c.convertTools(tools))
 	cfg := config.Get()
 	var sessionId string
@@ -395,6 +395,19 @@ func (c *copilotClient) send(ctx context.Context, messages []message.Message, to
 }
 
 func (c *copilotClient) stream(ctx context.Context, messages []message.Message, tools []toolsPkg.BaseTool) <-chan ProviderEvent {
+	eventChan := make(chan ProviderEvent)
+	
+	if c.options.bearerToken == "" {
+		go func() {
+			eventChan <- ProviderEvent{
+				Type:  EventError,
+				Error: fmt.Errorf("copilot client is not initialized - authentication may have failed"),
+			}
+			close(eventChan)
+		}()
+		return eventChan
+	}
+	
 	params := c.preparedParams(c.convertMessages(ctx, messages), c.convertTools(tools))
 	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
 		IncludeUsage: openai.Bool(true),
@@ -418,7 +431,6 @@ func (c *copilotClient) stream(ctx context.Context, messages []message.Message, 
 	}
 
 	attempts := 0
-	eventChan := make(chan ProviderEvent)
 
 	go func() {
 		for {
@@ -688,6 +700,12 @@ func WithCopilotExtraHeaders(headers map[string]string) CopilotOption {
 func WithCopilotBearerToken(bearerToken string) CopilotOption {
 	return func(options *copilotOptions) {
 		options.bearerToken = bearerToken
+	}
+}
+
+func WithCopilotBaseURL(baseURL string) CopilotOption {
+	return func(options *copilotOptions) {
+		options.baseURL = baseURL
 	}
 }
 

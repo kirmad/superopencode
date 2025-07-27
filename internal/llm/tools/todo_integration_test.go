@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -18,7 +19,7 @@ func TestTodoWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Initial read failed: %v", err)
 	}
-	if response.Content != "No todos found for this session." {
+	if !strings.Contains(response.Content, "No todos found for this session.") {
 		t.Errorf("Expected empty todos message, got: %s", response.Content)
 	}
 
@@ -47,7 +48,12 @@ func TestTodoWorkflow(t *testing.T) {
 	}
 
 	var returnedTodos []TodoItem
-	err = json.Unmarshal([]byte(response.Content), &returnedTodos)
+	// Extract JSON part before any validation notes
+	content := response.Content
+	if validationIndex := strings.Index(content, "\n<validation-"); validationIndex != -1 {
+		content = content[:validationIndex]
+	}
+	err = json.Unmarshal([]byte(content), &returnedTodos)
 	if err != nil {
 		t.Fatalf("Failed to parse todos: %v", err)
 	}
@@ -83,7 +89,12 @@ func TestTodoWorkflow(t *testing.T) {
 		t.Fatalf("Final read failed: %v", err)
 	}
 
-	err = json.Unmarshal([]byte(response.Content), &returnedTodos)
+	// Extract JSON part before any validation notes
+	content = response.Content
+	if validationIndex := strings.Index(content, "\n<validation-"); validationIndex != -1 {
+		content = content[:validationIndex]
+	}
+	err = json.Unmarshal([]byte(content), &returnedTodos)
 	if err != nil {
 		t.Fatalf("Failed to parse final todos: %v", err)
 	}

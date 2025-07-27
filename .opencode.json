@@ -1,8 +1,14 @@
 {
-  "$schema": "./opencode-schema.json",
+  "copilot": {
+    "enable_copilot": true,
+    "auto_install": true,
+    "fallback_to_gopls": true,
+    "chat_enabled": true,
+    "completion_enabled": true,
+    "log_level": "debug"
+  },
   "lsp": {
-    "gopls": {
-      "command": "gopls"
-    }
-  }
+  },
+  "debug": true,
+  "debugLSP": true
 }
