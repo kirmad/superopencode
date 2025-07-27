@@ -73,8 +73,17 @@ func processContextPaths(workDir string, paths []string) string {
 		go func(p string) {
 			defer wg.Done()
 
+			var searchPath string
+			if filepath.IsAbs(p) {
+				// Use absolute path as-is for global context files
+				searchPath = p
+			} else {
+				// Join relative paths with working directory  
+				searchPath = filepath.Join(workDir, p)
+			}
+			
 			if strings.HasSuffix(p, "/") {
-				filepath.WalkDir(filepath.Join(workDir, p), func(path string, d os.DirEntry, err error) error {
+				filepath.WalkDir(searchPath, func(path string, d os.DirEntry, err error) error {
 					if err != nil {
 						return err
 					}
@@ -96,7 +105,7 @@ func processContextPaths(workDir string, paths []string) string {
 					return nil
 				})
 			} else {
-				fullPath := filepath.Join(workDir, p)
+				fullPath := searchPath
 
 				// Check if we've already processed this file (case-insensitive)
 				processedMutex.Lock()

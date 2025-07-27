@@ -106,7 +106,7 @@ const (
 	MaxTokensFallbackDefault = 4096
 )
 
-var defaultContextPaths = []string{
+var defaultLocalContextPaths = []string{
 	".github/copilot-instructions.md",
 	".cursorrules",
 	".cursor/rules/",
@@ -118,6 +118,55 @@ var defaultContextPaths = []string{
 	"OpenCode.local.md",
 	"OPENCODE.md",
 	"OPENCODE.local.md",
+}
+
+// getGlobalContextPaths returns context paths from ~/.opencode directory
+func getGlobalContextPaths() []string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return []string{}
+	}
+	
+	opencodeDir := filepath.Join(homeDir, ".opencode")
+	
+	// Check if ~/.opencode directory exists
+	if _, err := os.Stat(opencodeDir); os.IsNotExist(err) {
+		return []string{}
+	}
+	
+	// Global context file variations to look for
+	globalContextFiles := []string{
+		"CLAUDE.md",
+		"CLAUDE.local.md",
+		"opencode.md",
+		"opencode.local.md", 
+		"OpenCode.md",
+		"OpenCode.local.md",
+		"OPENCODE.md",
+		"OPENCODE.local.md",
+	}
+	
+	var globalPaths []string
+	for _, file := range globalContextFiles {
+		globalPath := filepath.Join(opencodeDir, file)
+		// Add absolute path directly to support global context
+		globalPaths = append(globalPaths, globalPath)
+	}
+	
+	return globalPaths
+}
+
+// getDefaultContextPaths returns both local and global context paths
+func getDefaultContextPaths() []string {
+	contextPaths := make([]string, 0)
+	
+	// Add local context paths (relative to working directory)
+	contextPaths = append(contextPaths, defaultLocalContextPaths...)
+	
+	// Add global context paths (absolute paths from ~/.opencode)
+	contextPaths = append(contextPaths, getGlobalContextPaths()...)
+	
+	return contextPaths
 }
 
 // Global configuration instance
@@ -230,7 +279,7 @@ func configureViper() {
 // setDefaults configures default values for configuration options.
 func setDefaults(debug bool) {
 	viper.SetDefault("data.directory", defaultDataDirectory)
-	viper.SetDefault("contextPaths", defaultContextPaths)
+	viper.SetDefault("contextPaths", getDefaultContextPaths())
 	viper.SetDefault("tui.theme", "opencode")
 	viper.SetDefault("autoCompact", true)
 
