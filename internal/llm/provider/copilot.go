@@ -243,15 +243,11 @@ func (c *copilotClient) convertMessages(ctx context.Context, messages []message.
 		}
 	}
 
-	// Add TODO reminder as last user message if needed
+	// Add TODO reminder as system message if needed
 	if sessionID, ok := ctx.Value(toolsPkg.SessionIDContextKey).(string); ok {
 		reminder := toolsPkg.GetTodoReminderForSession(sessionID)
 		if reminder != "" {
-			textBlock := openai.ChatCompletionContentPartTextParam{Text: reminder}
-			content := []openai.ChatCompletionContentPartUnionParam{
-				{OfText: &textBlock},
-			}
-			copilotMessages = append(copilotMessages, openai.UserMessage(content))
+			copilotMessages = append(copilotMessages, openai.SystemMessage(reminder))
 		}
 	}
 

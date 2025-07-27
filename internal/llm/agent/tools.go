@@ -38,7 +38,6 @@ func CoderAgentTools(
 			tools.NewPatchTool(lspClients, permissions, history),
 			tools.NewWriteTool(lspClients, permissions, history),
 			NewAgentTool(sessions, messages, lspClients),
-			NewTaskTool(sessions, messages, permissions, history, lspClients),
 		}, otherTools...,
 	)
 }
@@ -64,16 +63,16 @@ func ResearchAgentTools(
 ) []tools.BaseTool {
 	ctx := context.Background()
 	mcpTools := GetMcpTools(ctx, permissions)
-	
+
 	return append([]tools.BaseTool{
-		tools.NewViewTool(lspClients),          // Read files
-		tools.NewGrepTool(),                    // Search content
-		tools.NewGlobTool(),                    // Find files
-		tools.NewSourcegraphTool(),             // Advanced search
-		tools.NewFetchTool(permissions),        // Web research
-		tools.NewLsTool(),                      // Directory exploration
-		tools.NewTodoReadTool(),                // Task tracking
-		tools.NewTodoWriteTool(),               // Task management
+		tools.NewViewTool(lspClients),   // Read files
+		tools.NewGrepTool(),             // Search content
+		tools.NewGlobTool(),             // Find files
+		tools.NewSourcegraphTool(),      // Advanced search
+		tools.NewFetchTool(permissions), // Web research
+		tools.NewLsTool(),               // Directory exploration
+		tools.NewTodoReadTool(),         // Task tracking
+		tools.NewTodoWriteTool(),        // Task management
 	}, mcpTools...) // Include MCP tools for enhanced research capabilities
 }
 
@@ -87,23 +86,23 @@ func CodingAgentTools(
 ) []tools.BaseTool {
 	ctx := context.Background()
 	mcpTools := GetMcpTools(ctx, permissions)
-	
+
 	var diagnosticTools []tools.BaseTool
 	if len(lspClients) > 0 {
 		diagnosticTools = append(diagnosticTools, tools.NewDiagnosticsTool(lspClients))
 	}
-	
+
 	return append(append([]tools.BaseTool{
-		tools.NewViewTool(lspClients),          // Read code
+		tools.NewViewTool(lspClients),                        // Read code
 		tools.NewWriteTool(lspClients, permissions, history), // Create files
 		tools.NewEditTool(lspClients, permissions, history),  // Edit code
-		tools.NewBashTool(permissions),         // Execute commands
-		tools.NewGrepTool(),                    // Search code
-		tools.NewGlobTool(),                    // Find files
+		tools.NewBashTool(permissions),                       // Execute commands
+		tools.NewGrepTool(),                                  // Search code
+		tools.NewGlobTool(),                                  // Find files
 		tools.NewPatchTool(lspClients, permissions, history), // Apply patches
-		tools.NewLsTool(),                      // Directory navigation
-		tools.NewTodoReadTool(),                // Task tracking
-		tools.NewTodoWriteTool(),               // Task management
+		tools.NewLsTool(),                                    // Directory navigation
+		tools.NewTodoReadTool(),                              // Task tracking
+		tools.NewTodoWriteTool(),                             // Task management
 	}, diagnosticTools...), mcpTools...) // Include MCP tools and diagnostics
 }
 
@@ -117,16 +116,16 @@ func AnalysisAgentTools(
 ) []tools.BaseTool {
 	ctx := context.Background()
 	mcpTools := GetMcpTools(ctx, permissions)
-	
+
 	return append([]tools.BaseTool{
-		tools.NewViewTool(lspClients),          // Read data files
-		tools.NewGrepTool(),                    // Pattern analysis
-		tools.NewGlobTool(),                    // File discovery
-		tools.NewBashTool(permissions),         // Data processing commands
-		tools.NewLsTool(),                      // Directory analysis
-		tools.NewSourcegraphTool(),             // Advanced search
-		tools.NewTodoReadTool(),                // Task tracking
-		tools.NewTodoWriteTool(),               // Task management
-		tools.NewFetchTool(permissions),        // External data access
+		tools.NewViewTool(lspClients),   // Read data files
+		tools.NewGrepTool(),             // Pattern analysis
+		tools.NewGlobTool(),             // File discovery
+		tools.NewBashTool(permissions),  // Data processing commands
+		tools.NewLsTool(),               // Directory analysis
+		tools.NewSourcegraphTool(),      // Advanced search
+		tools.NewTodoReadTool(),         // Task tracking
+		tools.NewTodoWriteTool(),        // Task management
+		tools.NewFetchTool(permissions), // External data access
 	}, mcpTools...) // Include MCP tools for enhanced analysis
 }

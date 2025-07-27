@@ -12,7 +12,7 @@ func TestGetTodoReminder_EmptyTodos(t *testing.T) {
 	sessionID := "reminder-test-empty"
 	
 	// Test with empty todos - should return reminder
-	reminder := getTodoReminder(sessionID)
+	reminder := tools.GetTodoReminderForSession(sessionID)
 	
 	if reminder == "" {
 		t.Error("Should return reminder when todos are empty")
@@ -43,7 +43,7 @@ func TestGetTodoReminder_WithTodos(t *testing.T) {
 	}
 	
 	// Test with existing todos - should NOT return reminder
-	reminder := getTodoReminder(sessionID)
+	reminder := tools.GetTodoReminderForSession(sessionID)
 	
 	if reminder != "" {
 		t.Error("Should not return reminder when todos exist")
@@ -52,7 +52,7 @@ func TestGetTodoReminder_WithTodos(t *testing.T) {
 
 func TestGetTodoReminder_EmptySessionID(t *testing.T) {
 	// Test with empty session ID - should not return reminder
-	reminder := getTodoReminder("")
+	reminder := tools.GetTodoReminderForSession("")
 	
 	if reminder != "" {
 		t.Error("Should not return reminder for empty session ID")
